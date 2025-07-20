@@ -54,10 +54,19 @@ class Event:
     timestamp: str
     description: str = ""
 
+class SystemType:
+    SERVER = "server"
+    DESKTOP = "desktop"
+    MINI_DESKTOP = "mini_desktop"
+    LAPTOP = "laptop"
+    MOBILE = "mobile"
+
 @dataclass
 class System:
     system_id: str
     system_name: str
+    type: SystemType
+
     os: SystemOS
     cpu: SystemCPU
     memory: SystemMemory
@@ -66,9 +75,15 @@ class System:
     events: list[Event]
     group: str = ""
 
+class SiteType:
+    HOUSE = "house"
+    DATACENTER = "datacenter"
+    CLOUD = "cloud"
+
 @dataclass
 class Site:
     name: str
+    type: SiteType
     geoname: str
     systems: list[System]
 

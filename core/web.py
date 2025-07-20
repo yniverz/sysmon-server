@@ -9,6 +9,7 @@ from flask_limiter import Limiter
 import redis
 import waitress
 from util import Config
+import os
 
 
 def get_remote_address():
@@ -79,6 +80,8 @@ class Dashboard:
             SESSION_COOKIE_SAMESITE="Strict", # no cross-site requests
             PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
         )
+        self.app.jinja_env.globals["local_debug"] = local_debug
+
 
 
         self.app.errorhandler(404)(self.standard_error)
@@ -87,6 +90,7 @@ class Dashboard:
         self.app.add_url_rule('/', 'index', self.index)
         self.app.add_url_rule('/login', 'login', self.login, methods=['GET', 'POST'])
         self.app.add_url_rule('/logout', 'logout', self.logout)
+        self.app.add_url_rule('/system_image/<name>', 'system_image', self.system_image)
 
 
 
@@ -131,6 +135,21 @@ class Dashboard:
         session.pop('logged_in', None)
         flash('Logged out successfully', 'success')
         return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
+    
+    def system_image(self, name: str) -> str:
+        images_dir = os.path.join(self.app.template_folder, 'system_images')
+        files = os.listdir(images_dir)
+        for file in files:
+            if file.replace('.png', '').lower() == name.lower():
+                return Response(
+                    open(os.path.join(images_dir, file), 'rb').read(),
+                    mimetype='image/png'
+                )
+            
+        return Response(
+            open(os.path.join(images_dir, 'server_dark.png'), 'rb').read(),
+            mimetype='image/png'
+        )
 
     def index(self):
         print("LOL")

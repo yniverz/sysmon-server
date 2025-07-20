@@ -1,3 +1,5 @@
 {% macro csrf_field() -%}
-  {# <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> #}
+  {% if not local_debug %}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% endif %}
 {%- endmacro %}
