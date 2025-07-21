@@ -8,6 +8,7 @@ from flask import Flask, Response, flash, redirect, render_template, request, se
 from flask_limiter import Limiter
 import redis
 import waitress
+from server import SystemReceiver
 from util import Config
 import os
 
@@ -60,10 +61,11 @@ def frp_backoff_limit():
 LOCAL_DEBUG = False
 
 class Dashboard:
-    def __init__(self, config: Config, local_debug: bool = False):
+    def __init__(self, config: Config, receiver: SystemReceiver, local_debug: bool = False):
         global LOCAL_DEBUG
 
         self.config = config
+        self.receiver = receiver
         self.local_debug = local_debug
         LOCAL_DEBUG = local_debug
 
@@ -152,7 +154,6 @@ class Dashboard:
         )
 
     def index(self):
-        print("LOL")
         if not session.get('logged_in'):
             return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
 
@@ -162,4 +163,5 @@ class Dashboard:
                             #    gateway_client_list=self.frp_manager.get_client_list(), 
                             #    gateway_connection_list=self.frp_manager.get_connection_list(), 
                             #    domain=self.nginx_manager.domain, 
-                               application_root=self.app.config['APPLICATION_ROOT'])
+                                providers=self.receiver.db.providers,
+                                application_root=self.app.config['APPLICATION_ROOT'])

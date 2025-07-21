@@ -1,4 +1,106 @@
-Hello World!
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SysMon Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tailwind CDN for quick styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .system-tile img{
+      transition: transform 0.15s ease;
+    }
+    .system-tile:hover img{
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body class="h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 text-white px-6 py-3 flex justify-between items-center">
+      <h1 class="text-xl font-semibold">SysMon Dashboard</h1>
+      <nav class="space-x-4">
+          <a href="{{ application_root + url_for('logout') }}" class="hover:underline">Logout</a>
+      </nav>
+  </header>
 
+  <!-- Main layout -->
+  <main class="flex flex-1 overflow-hidden">
+      <!-- Systems viewport -->
+      <section id="system-view" class="flex-1 overflow-auto p-6 bg-gray-50">
+          {% if providers %}
+              {% for provider in providers %}
+                <div class="mb-8">
+                  <h2 class="text-lg font-semibold mb-2">{{ provider.name }}</h2>
 
-<a href="{{ application_root + url_for('logout') }}">Logout</a>
+                  {% for site in provider.sites %}
+                      <div class="mb-6">
+                          <h3 class="text-base font-medium mb-1">{{ site.name }} ({{ site.type }})</h3>
+                          <div class="grid gap-4 auto-cols-max" style="grid-template-columns: repeat(auto-fill, minmax(120px,1fr));">
+                              {% for system in site.systems %}
+                                  <a href="{{ url_for('system_detail', system_id=system.system_id) }}"
+                                     class="system-tile text-center block"
+                                     data-type="{{ system.type }}"
+                                     title="{{ system.system_name }}">
+                                      <img src="{{ application_root + url_for('system_image', name=system.type + '_on') }}"
+                                           alt="{{ system.system_name }}"
+                                           class="w-24 h-24 mx-auto">
+                                      <span class="block mt-1 text-sm truncate">{{ system.system_name }}</span>
+                                  </a>
+                              {% endfor %}
+                          </div>
+                      </div>
+                  {% endfor %}
+                </div>
+              {% endfor %}
+          {% else %}
+              <p class="text-gray-500">No systems registered yet.</p>
+          {% endif %}
+      </section>
+
+      <!-- Sidebar menu -->
+      <aside class="w-64 bg-white border-l px-6 py-4 overflow-y-auto">
+          <h2 class="text-lg font-medium mb-4">Menu</h2>
+          <ul class="space-y-2">
+              <li><button class="filter-btn text-left w-full" data-filter="all">All systems</button></li>
+              <li><button class="filter-btn text-left w-full" data-filter="server">Servers</button></li>
+              <li><button class="filter-btn text-left w-full" data-filter="desktop">Desktops</button></li>
+              <li><button class="filter-btn text-left w-full" data-filter="mini_desktop">Mini‑Desktops</button></li>
+              <li><button class="filter-btn text-left w-full" data-filter="laptop">Laptops</button></li>
+              <li><button class="filter-btn text-left w-full" data-filter="mobile">Mobiles</button></li>
+          </ul>
+      </aside>
+  </main>
+
+  <script>
+      document.addEventListener('DOMContentLoaded', () => {
+          // click animation + follow link
+          document.querySelectorAll('.system-tile').forEach(tile => {
+              tile.addEventListener('click', event => {
+                  event.preventDefault();
+                  const link = tile.getAttribute('href');
+                  const img = tile.querySelector('img');
+                  img.style.transform = 'scale(1.15)';
+                  setTimeout(() => { window.location = link; }, 150);
+              });
+          });
+
+          // filtering
+          const filterButtons = document.querySelectorAll('.filter-btn');
+          filterButtons.forEach(btn => {
+              btn.addEventListener('click', () => {
+                  const filter = btn.dataset.filter;
+                  document.querySelectorAll('.system-tile').forEach(tile => {
+                      const type = tile.dataset.type;
+                      if (filter === 'all' || type === filter){
+                          tile.style.display = '';
+                      } else {
+                          tile.style.display = 'none';
+                      }
+                  });
+              });
+          });
+      });
+  </script>
+</body>
+</html>

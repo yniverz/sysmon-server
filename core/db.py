@@ -6,19 +6,20 @@ from util import DataclassJSONDecoder, DataclassJSONEncoder
 
 class SystemDB:
     def __init__(self, file_path: str = "structure.json"):
+        self.file_path = file_path
         self.providers: list[Provider] = []
 
-        self.load_from_file(file_path)
+        self.load_from_file()
 
-    def load_from_file(self, file_path: str):
-        if not os.path.exists(file_path):
+    def load_from_file(self):
+        if not os.path.exists(self.file_path):
             return
-        
-        with open(file_path, 'r') as f:
+
+        with open(self.file_path, 'r') as f:
             self.providers = json.load(f, cls=DataclassJSONDecoder)
 
-    def save_to_file(self, file_path: str):
-        with open(file_path, 'w') as f:
+    def save_to_file(self):
+        with open(self.file_path, 'w') as f:
             json.dump(self.providers, f, cls=DataclassJSONEncoder)
 
 
@@ -26,10 +27,13 @@ class SystemDB:
     def add_provider(self, provider: Provider):
         self.providers.append(provider)
 
+        self.save_to_file()
+
     def add_site(self, provider_name: str, site: Site):
         for provider in self.providers:
             if provider.name == provider_name:
                 provider.sites.append(site)
+                self.save_to_file()
                 return site
         raise ValueError(f"Provider {provider_name} not found.")
     
@@ -38,5 +42,6 @@ class SystemDB:
             for site in provider.sites:
                 if site.name == site_name:
                     site.systems.append(system)
+                    self.save_to_file()
                     return system
         raise ValueError(f"Site {site_name} not found.")

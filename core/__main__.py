@@ -25,8 +25,8 @@ def load_config():
 if __name__ == "__main__":
     cfg = load_config()
 
-    monitor = server.SystemReceiver(cfg.websocket_host, cfg.websocket_port)
-    monitor.start()
+    receiver = server.SystemReceiver(cfg.websocket_host, cfg.websocket_port)
+    receiver.start()
 
-    web_server = web.Dashboard(cfg, local_debug=True)
+    web_server = web.Dashboard(cfg, receiver, local_debug=True)
     web_server.run()
