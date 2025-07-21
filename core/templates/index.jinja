@@ -1,109 +1,191 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <title>SysMon Dashboard</title>
+    <title>SysMon – Interactive Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Tailwind CDN for quick styling -->
+    <!-- Tailwind for quick layout primitives (header/sidebar) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .system-tile img {
-            transition: transform 0.15s ease;
-        }
-
-        .system-tile:hover img {
-            transform: scale(1.05);
-        }
+        /* make the canvas always cover the available centre pane */
+        #sysCanvas { width:100%; height:100%; display:block; cursor:default; }
+        .sidebar button{ text-align:left; width:100%; }
     </style>
 </head>
-
 <body class="h-screen flex flex-col">
-    <!-- Header -->
+
+    <!-- ─── Header ─────────────────────────────────────────────────────── -->
     <header class="bg-gray-800 text-white px-6 py-3 flex justify-between items-center">
-        <h1 class="text-xl font-semibold">SysMon Dashboard</h1>
+        <h1 class="text-xl font-semibold">SysMon Dashboard</h1>
         <nav class="space-x-4">
             <a href="{{ application_root + url_for('logout') }}" class="hover:underline">Logout</a>
         </nav>
     </header>
 
-    <!-- Main layout -->
+    <!-- ─── Main layout: canvas + sidebar ──────────────────────────────── -->
     <main class="flex flex-1 overflow-hidden">
+        <!-- interactive canvas viewport -->
+        <div class="flex-1 bg-gray-50 relative">
+            <canvas id="sysCanvas"></canvas>
+        </div>
 
-        <!-- Sidebar menu -->
-        <aside class="w-64 bg-white border-l px-6 py-4 overflow-y-auto">
-            <h2 class="text-lg font-medium mb-4">Menu</h2>
+        <!-- sidebar -->
+        <aside class="sidebar w-64 bg-white border-l px-6 py-4 overflow-y-auto">
+            <h2 class="text-lg font-medium mb-4">Filter</h2>
             <ul class="space-y-2">
-                <li><button class="filter-btn text-left w-full" data-filter="all">All systems</button></li>
-                <li><button class="filter-btn text-left w-full" data-filter="server">Servers</button></li>
-                <li><button class="filter-btn text-left w-full" data-filter="desktop">Desktops</button></li>
-                <li><button class="filter-btn text-left w-full" data-filter="mini_desktop">Mini-Desktops</button></li>
-                <li><button class="filter-btn text-left w-full" data-filter="laptop">Laptops</button></li>
-                <li><button class="filter-btn text-left w-full" data-filter="mobile">Mobiles</button></li>
+                <li><button class="filter-btn" data-filter="all">All systems</button></li>
+                <li><button class="filter-btn" data-filter="server">Servers</button></li>
+                <li><button class="filter-btn" data-filter="desktop">Desktops</button></li>
+                <li><button class="filter-btn" data-filter="mini_desktop">Mini‑desktops</button></li>
+                <li><button class="filter-btn" data-filter="laptop">Laptops</button></li>
+                <li><button class="filter-btn" data-filter="mobile">Mobiles</button></li>
             </ul>
         </aside>
-        <!-- Systems viewport -->
-        <section id="system-view" class="flex-1 overflow-auto p-6 bg-gray-50">
-            {% if providers %}
-            {% for provider in providers %}
-            <div class="mb-8">
-                <h2 class="text-lg font-semibold mb-2">{{ provider.name }}</h2>
-
-                {% for site in provider.sites %}
-                <div class="mb-6">
-                    <h3 class="text-base font-medium mb-1">{{ site.name }} ({{ site.type }})</h3>
-                    <div class="grid gap-4 auto-cols-max"
-                        style="grid-template-columns: repeat(auto-fill, minmax(120px,1fr));">
-                        {% for system in site.systems %}
-                        {# <a href="{{ url_for('system_detail', system_id=system.id) }}" #} <a
-                            class="system-tile text-center block" data-type="{{ system.type }}"
-                            title="{{ system.name }}">
-                            <img src="{{ application_root + url_for('system_image', name=system.type, status='on') }}"
-                                alt="{{ system.name }}" class="w-24 h-24 mx-auto">
-                            <span class="block mt-1 text-sm truncate">{{ system.name }}</span>
-                        </a>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% endfor %}
-            {% else %}
-            <p class="text-gray-500">No systems registered yet.</p>
-            {% endif %}
-        </section>
     </main>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // click animation + follow link
-            document.querySelectorAll('.system-tile').forEach(tile => {
-                tile.addEventListener('click', event => {
-                    event.preventDefault();
-                    const link = tile.getAttribute('href');
-                    const img = tile.querySelector('img');
-                    img.style.transform = 'scale(1.15)';
-                    setTimeout(() => { window.location = link; }, 150);
-                });
-            });
+    <!-- embed system inventory for JS → canvas layout -->
+    <script id="sys‑data" type="application/json">{{ providers|tojson }}</script>
 
-            // filtering
-            const filterButtons = document.querySelectorAll('.filter-btn');
-            filterButtons.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const filter = btn.dataset.filter;
-                    document.querySelectorAll('.system-tile').forEach(tile => {
-                        const type = tile.dataset.type;
-                        if (filter === 'all' || type === filter) {
-                            tile.style.display = '';
-                        } else {
-                            tile.style.display = 'none';
+    <script>
+    (()=>{
+        /* ------------------------------------------------------------------
+         *  Config tables – keep in sync with util.SystemImage registrations
+         * ----------------------------------------------------------------*/
+        const META = {
+            server:       { max:4, dx:  0,   dy:-12, img:"server"   },
+            desktop:      { max:2, dx: 20,   dy: 10, img:"desktop"  },
+            mini_desktop: { max:4, dx:  0,   dy:  0, img:"mini_desktop" },
+            laptop:       { max:1, dx:  0,   dy:  0, img:"laptop"   },
+            mobile:       { max:1, dx:  0,   dy:  0, img:"mobile"   },
+        };
+        const IMG_BASE = "{{ application_root + url_for('system_image', name='__TYPE__') }}"; // «__TYPE__» placeholder
+        const IMG_PX   = 100;   // rendered base size (square)
+
+        /* ------------------------------------------------------------------
+         *  Canvas / resize helpers
+         * ----------------------------------------------------------------*/
+        const canvas  = document.getElementById("sysCanvas");
+        const ctx     = canvas.getContext("2d");
+        const DPR     = Math.max(1, window.devicePixelRatio||1);
+        function fitCanvas(){
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width  = rect.width  * DPR;
+            canvas.height = rect.height * DPR;
+            canvas.style.width  = rect.width + "px";
+            canvas.style.height = rect.height + "px";
+            ctx.scale(DPR,DPR);
+            drawAll();
+        }
+        window.addEventListener("resize", fitCanvas);
+
+        /* ------------------------------------------------------------------
+         *  Load images lazily & cache
+         * ----------------------------------------------------------------*/
+        const imgCache = {};
+        function loadImg(type){
+            if(imgCache[type]) return imgCache[type];
+            const url = IMG_BASE.replace("__TYPE__", type);
+            const p   = new Promise(res=>{ const i=new Image(); i.src=url; i.onload=()=>res(i); });
+            imgCache[type]=p; return p;
+        }
+
+        /* ------------------------------------------------------------------
+         *  Flatten provider/site structure → flat array of systems + site id
+         * ----------------------------------------------------------------*/
+        const raw = JSON.parse(document.getElementById("sys‑data").textContent||"[]");
+        const systems = [];
+        raw.forEach(p => p.sites.forEach(s=> s.systems.forEach(sys=>{
+            systems.push({...sys, site:s.name});
+        })));
+
+        /* ------------------------------------------------------------------
+         *  Layout algorithm (very simple packer)
+         * ----------------------------------------------------------------*/
+        let filter = "all";
+        const drawables = [];   // {x,y,w,h, sysIds:[]}
+
+        function computeLayout(){
+            drawables.length = 0; // reset
+            let x=20, y=20, lineH=0;
+            const GAP = 40;
+
+            const bySite = groupBy(systems.filter(s=>filter==='all'||s.type===filter), s=>s.site);
+            Object.values(bySite).forEach(siteArr=>{
+                // group by type to allow stacking clusters
+                const byType = groupBy(siteArr, s=>s.type);
+                Object.entries(byType).forEach(([type, arr])=>{
+                    const m = META[type];
+                    const stacks = chunk(arr, m.max);
+                    stacks.forEach(stack=>{
+                        const w = IMG_PX + Math.abs(m.dx)*(stack.length-1);
+                        const h = IMG_PX + Math.abs(m.dy)*(stack.length-1);
+                        if(x+w > canvas.width/DPR - 20){ // wrap line
+                            x = 20; y += lineH + GAP; lineH = 0;
                         }
+                        drawables.push({x,y,w,h, stack, type});
+                        x += w + GAP;
+                        lineH = Math.max(lineH, h);
                     });
                 });
+                // after a site block, line‑break
+                x = 20; y += lineH + GAP*1.5; lineH = 0;
             });
+        }
+
+        function drawAll(){
+            ctx.clearRect(0,0,canvas.width/DPR, canvas.height/DPR);
+            computeLayout();
+            drawables.forEach(async d=>{
+                const {dx,dy} = META[d.type];
+                for(let i=0;i<d.stack.length;i++){
+                    const sys = d.stack[i];
+                    const img = await loadImg(d.type);
+                    ctx.drawImage(img, d.x + i*dx, d.y + i*dy, IMG_PX, IMG_PX);
+                }
+            });
+        }
+
+        /* ------------------------------------------------------------------
+         *  Interactivity – click → details, hover highlight
+         * ----------------------------------------------------------------*/
+        let hoverBox=null;
+        canvas.addEventListener('mousemove', ev=>{
+            const {offsetX:mx, offsetY:my}=ev;
+            const box = drawables.find(d=>mx>=d.x && mx<=d.x+d.w && my>=d.y && my<=d.y+d.h);
+            if(box!==hoverBox){ hoverBox=box; drawAll(); if(box){ highlight(box);} }
         });
+        function highlight(box){
+            ctx.save(); ctx.lineWidth=2; ctx.strokeStyle='#2563eb';
+            ctx.strokeRect(box.x-2, box.y-2, box.w+4, box.h+4);
+            ctx.restore();
+        }
+        canvas.addEventListener('click', ev=>{
+            const {offsetX:mx, offsetY:my}=ev;
+            const box = drawables.find(d=>mx>=d.x && mx<=d.x+d.w && my>=d.y && my<=d.y+d.h);
+            if(box){
+                // pick system under pointer (top-most)
+                const idx = box.stack.length-1; // assume top one for now
+                const sys = box.stack[idx];
+                if(sys?.id){ window.location = `{{ application_root }}/system/${sys.id}`; }
+            }
+        });
+
+        /* ------------------------------------------------------------------
+         *  Sidebar filter buttons
+         * ----------------------------------------------------------------*/
+        document.querySelectorAll('.filter-btn').forEach(btn=>{
+            btn.addEventListener('click',()=>{ filter=btn.dataset.filter; fitCanvas(); });
+        });
+
+        /* ------------------------------------------------------------------
+         *  Utils
+         * ----------------------------------------------------------------*/
+        function groupBy(arr, fn){ const m={}; arr.forEach(o=>{ const k=fn(o); (m[k]=m[k]||[]).push(o);}); return m; }
+        function chunk(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size){ out.push(arr.slice(i,i+size)); } return out; }
+
+        // kick‑off
+        fitCanvas();
+    })();
     </script>
 </body>
-
 </html>

@@ -4,7 +4,7 @@ from datetime import timedelta
 import json
 import time
 import uuid
-from flask import Flask, Response, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 import redis
 import waitress
@@ -93,6 +93,7 @@ class Dashboard:
         self.app.add_url_rule('/login', 'login', self.login, methods=['GET', 'POST'])
         self.app.add_url_rule('/logout', 'logout', self.logout)
         self.app.add_url_rule('/system_image/<name>', 'system_image', self.system_image)
+        self.app.add_url_rule('/system/<system_id>', 'system_detail', self.system_detail)
 
 
 
@@ -138,17 +139,43 @@ class Dashboard:
         flash('Logged out successfully', 'success')
         return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
     
-    def system_image(self, name: str, status: str = "on") -> str:
-        # images_dir = os.path.join(self.app.template_folder, 'system_images')
-        # files = os.listdir(images_dir)
-        # for file in files:
-        #     if file.replace('.png', '').lower() == name.lower():
-        #         return Response(
-        #             open(os.path.join(images_dir, file), 'rb').read(),
-        #             mimetype='image/png'
-        #         )
-            
-        return SYSTEM_IMAGES.get(name, ["on", "off", "on"])
+    def system_image(self, name: str) -> str:
+        if not session.get('logged_in'):
+            return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
+
+        variations = request.args.get('v', default='on').split(',')
+        try:
+            return SYSTEM_IMAGES.get(name, variations)
+        except ValueError:
+            abort(404)
+
+    def _find_system(self, system_id: str):
+        """
+        Walk the DB and return (system, site, provider) or (None, None, None)
+        if the ID is unknown.
+        """
+        for prov in self.receiver.db.providers:
+            for site in prov.sites:
+                for sys in site.systems:
+                    if sys.id == system_id:
+                        return sys, site, prov
+        return None, None, None
+
+    def system_detail(self, system_id: str):
+        if not session.get('logged_in'):
+            return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
+
+        system, site, provider = self._find_system(system_id)
+        if system is None:
+            abort(404)
+
+        return render_template(
+            "system_detail.jinja",          # create this tmpl when ready
+            system=system,
+            site=site,
+            provider=provider,
+            application_root=self.app.config["APPLICATION_ROOT"],
+        )
 
     def index(self):
         if not session.get('logged_in'):
