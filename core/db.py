@@ -34,11 +34,11 @@ class SystemDB:
                             systems=systems
                         ))
 
-                self.providers.append(Provider(
-                    name=provider_data["name"],
-                    sites=sites,
-                    url=provider_data.get("url", "")
-                ))
+                    self.providers.append(Provider(
+                        name=provider_data["name"],
+                        sites=sites,
+                        url=provider_data.get("url", "")
+                    ))
 
             # create a hash of the template file
             file_hash = hash(json.dumps(structure, sort_keys=True))
