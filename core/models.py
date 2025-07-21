@@ -63,16 +63,16 @@ class SystemType:
 
 @dataclass
 class System:
-    system_id: str
-    system_name: str
+    id: str
+    name: str
     type: SystemType
 
-    os: SystemOS
-    cpu: SystemCPU
-    memory: SystemMemory
-    network: SystemNetwork
-    disks: list[SystemDisk]
-    events: list[Event]
+    os: SystemOS = None
+    cpu: SystemCPU = None
+    memory: SystemMemory = None
+    network: SystemNetwork = None
+    disks: list[SystemDisk] = None
+    events: list[Event] = None
     group: str = ""
 
 class SiteType:

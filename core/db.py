@@ -1,5 +1,5 @@
 import os
-from flask import json
+import json
 from models import Provider, Site, System
 from util import DataclassJSONDecoder, DataclassJSONEncoder
 
@@ -19,6 +19,7 @@ class SystemDB:
             self.providers = json.load(f, cls=DataclassJSONDecoder)
 
     def save_to_file(self):
+        print(f"Saving {len(self.providers)} providers to {self.file_path}") 
         with open(self.file_path, 'w') as f:
             json.dump(self.providers, f, cls=DataclassJSONEncoder)
 

@@ -3,6 +3,7 @@ import server
 import web
 import toml
 from util import Config
+import models
 
 # load config.toml to get host and port
 def load_config():
@@ -27,6 +28,29 @@ if __name__ == "__main__":
 
     receiver = server.SystemReceiver(cfg.websocket_host, cfg.websocket_port)
     receiver.start()
+
+    # receiver.db.add_provider(models.Provider(name="Default Provider", sites=[]))
+    # receiver.db.add_site("Default Provider", models.Site(
+    #     name="Default Site",
+    #     type="datacenter",
+    #     geoname="Default Location",
+    #     systems=[]
+    # ))
+    # receiver.db.add_system("Default Site", models.System(
+    #     id="default_system",
+    #     name="Default System",
+    #     type="laptop"
+    # ))
+    # receiver.db.add_system("Default Site", models.System(
+    #     id="2",
+    #     name="System2",
+    #     type="server"
+    # ))
+    # receiver.db.add_system("Default Site", models.System(
+    #     id="3",
+    #     name="System3",
+    #     type="desktop"
+    # ))
 
     web_server = web.Dashboard(cfg, receiver, local_debug=True)
     web_server.run()

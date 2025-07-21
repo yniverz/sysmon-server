@@ -9,7 +9,7 @@ from flask_limiter import Limiter
 import redis
 import waitress
 from server import SystemReceiver
-from util import Config
+from util import Config, SYSTEM_IMAGES
 import os
 
 
@@ -138,20 +138,17 @@ class Dashboard:
         flash('Logged out successfully', 'success')
         return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
     
-    def system_image(self, name: str) -> str:
-        images_dir = os.path.join(self.app.template_folder, 'system_images')
-        files = os.listdir(images_dir)
-        for file in files:
-            if file.replace('.png', '').lower() == name.lower():
-                return Response(
-                    open(os.path.join(images_dir, file), 'rb').read(),
-                    mimetype='image/png'
-                )
+    def system_image(self, name: str, status: str = "on") -> str:
+        # images_dir = os.path.join(self.app.template_folder, 'system_images')
+        # files = os.listdir(images_dir)
+        # for file in files:
+        #     if file.replace('.png', '').lower() == name.lower():
+        #         return Response(
+        #             open(os.path.join(images_dir, file), 'rb').read(),
+        #             mimetype='image/png'
+        #         )
             
-        return Response(
-            open(os.path.join(images_dir, 'server_dark.png'), 'rb').read(),
-            mimetype='image/png'
-        )
+        return SYSTEM_IMAGES.get(name, ["on", "off", "on"])
 
     def index(self):
         if not session.get('logged_in'):
