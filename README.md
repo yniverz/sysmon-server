@@ -1,7 +1,3 @@
-Here’s a concise and clear `README.md` for your **SysMon Dashboard server** repo, designed to complement the agent's README:
-
----
-
 [![License: NCPUL](https://img.shields.io/badge/license-NCPUL-blue.svg)](./LICENSE.md)
 
 # sysmon‑server
