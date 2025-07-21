@@ -31,15 +31,15 @@ if __name__ == "__main__":
 
     # receiver.db.add_provider(models.Provider(name="Default Provider", sites=[]))
     # receiver.db.add_site("Default Provider", models.Site(
-    #     name="Default Site",
-    #     type="datacenter",
+    #     name="Default Site 1",
+    #     type="house",
     #     geoname="Default Location",
     #     systems=[]
     # ))
-    # receiver.db.add_system("Default Site", models.System(
-    #     id="default_system",
-    #     name="Default System",
-    #     type="laptop"
+    # receiver.db.add_system("Default Site 1", models.System(
+    #     id="default_system2",
+    #     name="Default System 2",
+    #     type="server"
     # ))
     # receiver.db.add_system("Default Site", models.System(
     #     id="2",

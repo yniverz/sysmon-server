@@ -1,191 +1,271 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>SysMon – Interactive Dashboard</title>
+    <title>SysMon Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Tailwind for quick layout primitives (header/sidebar) -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* make the canvas always cover the available centre pane */
-        #sysCanvas { width:100%; height:100%; display:block; cursor:default; }
-        .sidebar button{ text-align:left; width:100%; }
+        /* ── Animations ───────────────────────────────────────────────────── */
+        .icon-box {
+            transition: transform .15s ease;
+        }
+
+        .icon-box:hover {
+            transform: scale(1.05);
+        }
+
+        /* hover +5 % */
+        .icon-box.pop {
+            transform: scale(1.15);
+        }
+
+        /* click +15 % */
+        .tile-img {
+            width: 96px;
+            height: 96px;
+            pointer-events: none;
+        }
+
+        /* ── Modal overlay ───────────────────────────────────────────────── */
+        #modal-backdrop {
+            @apply fixed inset-0 bg-black bg-opacity-50 hidden;
+        }
+
+        #modal-wrapper {
+            @apply fixed inset-4 lg:inset-10 bg-white rounded-lg shadow-xl overflow-auto hidden;
+        }
+
+        /* smooth appear */
+        .fade-in {
+            animation: fade .15s ease-out forwards;
+        }
+
+        @keyframes fade {
+            from {
+                opacity: 0;
+                transform: scale(.96);
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
     </style>
 </head>
-<body class="h-screen flex flex-col">
 
-    <!-- ─── Header ─────────────────────────────────────────────────────── -->
+<body class="h-screen flex flex-col">
+    <!-- Header -->
     <header class="bg-gray-800 text-white px-6 py-3 flex justify-between items-center">
-        <h1 class="text-xl font-semibold">SysMon Dashboard</h1>
+        <h1 class="text-xl font-semibold">SysMon Dashboard</h1>
         <nav class="space-x-4">
             <a href="{{ application_root + url_for('logout') }}" class="hover:underline">Logout</a>
         </nav>
     </header>
 
-    <!-- ─── Main layout: canvas + sidebar ──────────────────────────────── -->
+    <!-- Main layout -->
     <main class="flex flex-1 overflow-hidden">
-        <!-- interactive canvas viewport -->
-        <div class="flex-1 bg-gray-50 relative">
-            <canvas id="sysCanvas"></canvas>
-        </div>
-
-        <!-- sidebar -->
-        <aside class="sidebar w-64 bg-white border-l px-6 py-4 overflow-y-auto">
-            <h2 class="text-lg font-medium mb-4">Filter</h2>
+        <!-- Sidebar (left) -->
+        <aside class="w-64 bg-white border-r px-6 py-4 overflow-y-auto">
+            <h2 class="text-lg font-medium mb-4">Menu</h2>
             <ul class="space-y-2">
-                <li><button class="filter-btn" data-filter="all">All systems</button></li>
-                <li><button class="filter-btn" data-filter="server">Servers</button></li>
-                <li><button class="filter-btn" data-filter="desktop">Desktops</button></li>
-                <li><button class="filter-btn" data-filter="mini_desktop">Mini‑desktops</button></li>
-                <li><button class="filter-btn" data-filter="laptop">Laptops</button></li>
-                <li><button class="filter-btn" data-filter="mobile">Mobiles</button></li>
+                <li><button class="filter-btn w-full text-left" data-filter="all">All systems</button></li>
+                <li><button class="filter-btn w-full text-left" data-filter="server">Servers</button></li>
+                <li><button class="filter-btn w-full text-left" data-filter="desktop">Desktops</button></li>
+                <li><button class="filter-btn w-full text-left" data-filter="mini_desktop">Mini‑Desktops</button></li>
+                <li><button class="filter-btn w-full text-left" data-filter="laptop">Laptops</button></li>
+                <li><button class="filter-btn w-full text-left" data-filter="mobile">Mobiles</button></li>
             </ul>
         </aside>
+
+        <!-- Systems viewport -->
+        <section id="system-view" class="flex-1 overflow-auto p-6 bg-gray-50"></section>
     </main>
 
-    <!-- embed system inventory for JS → canvas layout -->
-    <script id="sys‑data" type="application/json">{{ providers|tojson }}</script>
+    <!-- Modal markup (hidden by default) -->
+    <div id="modal-backdrop"></div>
+    <div id="modal-wrapper" class="p-6 flex flex-col">
+        <button id="modal-close" class="ml-auto text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        <div id="modal-body" class="mt-4"></div>
+    </div>
 
-    <script>
-    (()=>{
-        /* ------------------------------------------------------------------
-         *  Config tables – keep in sync with util.SystemImage registrations
-         * ----------------------------------------------------------------*/
+    <!-- Provider / site / system data -->
+    <script id="sys-data" type="application/json">{{ providers|tojson }}</script>
+
+    <!-- Client‑side renderer ------------------------------------------------ -->
+    <script type="module">
+        import { loadIcon } from "{{ url_for('static', filename='js/icon-loader.js') }}";
+
+        /* ── Helper functions (now hoisted) ─────────────────────────────────── */
+        function groupBy(arr, fn) {
+            return arr.reduce((m, o) => {
+                const k = fn(o);
+                (m[k] = m[k] || []).push(o);
+                return m;
+            }, {});
+        }
+
+        function chunk(arr, size) {
+            const out = [];
+            for (let i = 0; i < arr.length; i += size) {
+                out.push(arr.slice(i, i + size));
+            }
+            return out;
+        }
+
+        const COMPOSITE_CACHE = new Map();
+        const APP_ROOT = "{{ application_root }}";
+
+        /* per‑type stacking meta (same as util.SystemImage) */
         const META = {
-            server:       { max:4, dx:  0,   dy:-12, img:"server"   },
-            desktop:      { max:2, dx: 20,   dy: 10, img:"desktop"  },
-            mini_desktop: { max:4, dx:  0,   dy:  0, img:"mini_desktop" },
-            laptop:       { max:1, dx:  0,   dy:  0, img:"laptop"   },
-            mobile:       { max:1, dx:  0,   dy:  0, img:"mobile"   },
+            server: { max: 4, dx: 0, dy: -12 },
+            desktop: { max: 2, dx: 20, dy: 10 },
+            mini_desktop: { max: 4, dx: 0, dy: 0 },
+            laptop: { max: 1, dx: 0, dy: 0 },
+            mobile: { max: 1, dx: 0, dy: 0 },
         };
-        const IMG_BASE = "{{ application_root + url_for('system_image', name='__TYPE__') }}"; // «__TYPE__» placeholder
-        const IMG_PX   = 100;   // rendered base size (square)
+        const TILE_PX = 96;     // draw size for each layer
+        const SOURCE_SIZE = 120;/* min composite canvas (≈ 96 + margins) */
 
-        /* ------------------------------------------------------------------
-         *  Canvas / resize helpers
-         * ----------------------------------------------------------------*/
-        const canvas  = document.getElementById("sysCanvas");
-        const ctx     = canvas.getContext("2d");
-        const DPR     = Math.max(1, window.devicePixelRatio||1);
-        function fitCanvas(){
-            const rect = canvas.parentElement.getBoundingClientRect();
-            canvas.width  = rect.width  * DPR;
-            canvas.height = rect.height * DPR;
-            canvas.style.width  = rect.width + "px";
-            canvas.style.height = rect.height + "px";
-            ctx.scale(DPR,DPR);
-            drawAll();
-        }
-        window.addEventListener("resize", fitCanvas);
+        /* ---------- build DOM ------------------------------------------------ */
+        const providers = JSON.parse(document.getElementById('sys-data').textContent || '[]');
+        const view = document.getElementById('system-view');
 
-        /* ------------------------------------------------------------------
-         *  Load images lazily & cache
-         * ----------------------------------------------------------------*/
-        const imgCache = {};
-        function loadImg(type){
-            if(imgCache[type]) return imgCache[type];
-            const url = IMG_BASE.replace("__TYPE__", type);
-            const p   = new Promise(res=>{ const i=new Image(); i.src=url; i.onload=()=>res(i); });
-            imgCache[type]=p; return p;
-        }
+        providers.forEach(prov => {
+            const provWrap = section('mb-10');
+            provWrap.append(h('h2', 'text-xl font-semibold mb-4 border-b border-gray-300 pb-1', prov.name));
 
-        /* ------------------------------------------------------------------
-         *  Flatten provider/site structure → flat array of systems + site id
-         * ----------------------------------------------------------------*/
-        const raw = JSON.parse(document.getElementById("sys‑data").textContent||"[]");
-        const systems = [];
-        raw.forEach(p => p.sites.forEach(s=> s.systems.forEach(sys=>{
-            systems.push({...sys, site:s.name});
-        })));
+            prov.sites.forEach(site => {
+                const siteWrap = section('mb-8 pl-4 border-l border-gray-200');
+                siteWrap.append(h('h3', 'text-base font-medium mb-3 text-gray-700',
+                    `${site.name} (${site.type})`));
 
-        /* ------------------------------------------------------------------
-         *  Layout algorithm (very simple packer)
-         * ----------------------------------------------------------------*/
-        let filter = "all";
-        const drawables = [];   // {x,y,w,h, sysIds:[]}
+                const byGroup = groupBy(site.systems, s => s.group || '');
+                Object.entries(byGroup).forEach(([grp, list]) => {
+                    const grpWrap = h('div', 'mb-6');
+                    if (grp) grpWrap.append(h('h4', 'text-sm font-semibold text-gray-600 mb-1', grp));
 
-        function computeLayout(){
-            drawables.length = 0; // reset
-            let x=20, y=20, lineH=0;
-            const GAP = 40;
+                    const grid = h('div', 'grid gap-4',
+                        null, { style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr));' });
+                    grpWrap.append(grid); siteWrap.append(grpWrap);
 
-            const bySite = groupBy(systems.filter(s=>filter==='all'||s.type===filter), s=>s.site);
-            Object.values(bySite).forEach(siteArr=>{
-                // group by type to allow stacking clusters
-                const byType = groupBy(siteArr, s=>s.type);
-                Object.entries(byType).forEach(([type, arr])=>{
-                    const m = META[type];
-                    const stacks = chunk(arr, m.max);
-                    stacks.forEach(stack=>{
-                        const w = IMG_PX + Math.abs(m.dx)*(stack.length-1);
-                        const h = IMG_PX + Math.abs(m.dy)*(stack.length-1);
-                        if(x+w > canvas.width/DPR - 20){ // wrap line
-                            x = 20; y += lineH + GAP; lineH = 0;
+                    const byType = groupBy(list, s => s.type);
+                    Object.entries(byType).forEach(([type, arr]) => {
+                        const { max } = META[type];
+                        for (const stack of chunk(arr, max)) {
+                            const tile = h('div', 'text-center');
+                            const box = h('a', 'icon-box inline-block',
+                                null, {
+                                href: `${APP_ROOT}/system_details?id=${stack.at(-1).id}`,
+                                'data-type': type
+                            });
+
+                            composeIcon(type, stack).then(url => {
+                                const img = h('img', 'tile-img', null, { src: url, alt: type });
+                                box.append(img);
+                            });
+
+                            box.addEventListener('click', ev => {
+                                ev.preventDefault();
+                                openModal(box.getAttribute('href'));
+                            });
+
+                            tile.append(box);
+                            tile.append(h('span', 'block mt-1 text-sm truncate',
+                                stack.length > 1 ? `${stack.length}× ${type}` : stack[0].name));
+                            grid.append(tile);
                         }
-                        drawables.push({x,y,w,h, stack, type});
-                        x += w + GAP;
-                        lineH = Math.max(lineH, h);
                     });
                 });
-                // after a site block, line‑break
-                x = 20; y += lineH + GAP*1.5; lineH = 0;
-            });
-        }
 
-        function drawAll(){
-            ctx.clearRect(0,0,canvas.width/DPR, canvas.height/DPR);
-            computeLayout();
-            drawables.forEach(async d=>{
-                const {dx,dy} = META[d.type];
-                for(let i=0;i<d.stack.length;i++){
-                    const sys = d.stack[i];
-                    const img = await loadImg(d.type);
-                    ctx.drawImage(img, d.x + i*dx, d.y + i*dy, IMG_PX, IMG_PX);
+                provWrap.append(siteWrap);
+            });
+            view.append(provWrap);
+        });
+
+        /* ---------- composite builder (Canvas) ------------------------------- */
+        async function composeIcon(type, stack) {
+            const key = type + '|' + stack.map(s => s.icon_layers?.join('+') || 'on').join(';');
+            if (COMPOSITE_CACHE.has(key)) return COMPOSITE_CACHE.get(key);
+
+            const { dx, dy } = META[type];
+            const parts = [];
+            for (let i = 0; i < stack.length; i++) {
+                const sys = stack[i];
+                const layers = sys.icon_layers ?? ['on'];
+                for (const layer of layers) {
+                    parts.push({ img: await loadIcon(type, layer), ox: i * dx, oy: i * dy });
                 }
-            });
-        }
-
-        /* ------------------------------------------------------------------
-         *  Interactivity – click → details, hover highlight
-         * ----------------------------------------------------------------*/
-        let hoverBox=null;
-        canvas.addEventListener('mousemove', ev=>{
-            const {offsetX:mx, offsetY:my}=ev;
-            const box = drawables.find(d=>mx>=d.x && mx<=d.x+d.w && my>=d.y && my<=d.y+d.h);
-            if(box!==hoverBox){ hoverBox=box; drawAll(); if(box){ highlight(box);} }
-        });
-        function highlight(box){
-            ctx.save(); ctx.lineWidth=2; ctx.strokeStyle='#2563eb';
-            ctx.strokeRect(box.x-2, box.y-2, box.w+4, box.h+4);
-            ctx.restore();
-        }
-        canvas.addEventListener('click', ev=>{
-            const {offsetX:mx, offsetY:my}=ev;
-            const box = drawables.find(d=>mx>=d.x && mx<=d.x+d.w && my>=d.y && my<=d.y+d.h);
-            if(box){
-                // pick system under pointer (top-most)
-                const idx = box.stack.length-1; // assume top one for now
-                const sys = box.stack[idx];
-                if(sys?.id){ window.location = `{{ application_root }}/system/${sys.id}`; }
             }
+
+            const minX = Math.min(0, ...parts.map(p => p.ox));
+            const minY = Math.min(0, ...parts.map(p => p.oy));
+            const maxX = Math.max(...parts.map(p => p.ox + TILE_PX));
+            const maxY = Math.max(...parts.map(p => p.oy + TILE_PX));
+            const M = 10, cropW = maxX - minX + M * 2, cropH = maxY - minY + M * 2;
+            const W = Math.max(cropW, SOURCE_SIZE), H = Math.max(cropH, SOURCE_SIZE);
+
+            const cvs = new OffscreenCanvas(W, H), ctx = cvs.getContext('2d');
+            parts.forEach(p => {
+                ctx.drawImage(p.img,
+                    Math.round((W - cropW) / 2 + M + p.ox - minX),
+                    Math.round((H - cropH) / 2 + M + p.oy - minY),
+                    TILE_PX, TILE_PX);
+            });
+
+            const url = await cvs.convertToBlob({ type: 'image/png' }).then(b => blobToDataURL(b));
+            COMPOSITE_CACHE.set(key, url); return url;
+        }
+        const blobToDataURL = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
+
+        /* ---------- Modal logic --------------------------------------------- */
+        const backdrop = document.getElementById('modal-backdrop');
+        const wrapper = document.getElementById('modal-wrapper');
+        const body = document.getElementById('modal-body');
+        document.getElementById('modal-close').onclick = closeModal;
+        backdrop.onclick = closeModal;
+
+        function openModal(url) {
+            backdrop.classList.remove('hidden');
+            wrapper.classList.remove('hidden'); wrapper.classList.add('fade-in');
+            body.innerHTML = '<p class="text-gray-500">Loading…</p>';
+
+            fetch(url, { credentials: 'include' })          //  ← new
+                .then(resp => {
+                    if (resp.redirected && resp.url.includes('/login')) {
+                        throw new Error('login');
+                    }
+                    return resp.text();
+                })
+                .then(html => { body.innerHTML = html; })
+                .catch(() => { body.innerHTML = '<p class="text-red-600">Failed to load details.</p>'; });
+        }
+        function closeModal() {
+            wrapper.classList.add('hidden'); backdrop.classList.add('hidden'); body.innerHTML = '';
+        }
+
+        /* ---------- sidebar filtering --------------------------------------- */
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.dataset.filter;
+                document.querySelectorAll('[data-type]').forEach(t => {
+                    t.style.display = filter === 'all' || t.dataset.type === filter ? '' : 'none';
+                });
+            });
         });
 
-        /* ------------------------------------------------------------------
-         *  Sidebar filter buttons
-         * ----------------------------------------------------------------*/
-        document.querySelectorAll('.filter-btn').forEach(btn=>{
-            btn.addEventListener('click',()=>{ filter=btn.dataset.filter; fitCanvas(); });
-        });
+        /* ---------- helpers -------------------------------------------------- */
+        function h(tag, cls = '', txt = '', attr = {}) {
+            const el = document.createElement(tag);
+            if (cls) el.className = cls; if (txt) el.textContent = txt;
+            Object.entries(attr).forEach(([k, v]) => el.setAttribute(k, v));
+            return el;
+        }
+        function section(cls = '') { return h('section', cls); }
 
-        /* ------------------------------------------------------------------
-         *  Utils
-         * ----------------------------------------------------------------*/
-        function groupBy(arr, fn){ const m={}; arr.forEach(o=>{ const k=fn(o); (m[k]=m[k]||[]).push(o);}); return m; }
-        function chunk(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size){ out.push(arr.slice(i,i+size)); } return out; }
-
-        // kick‑off
-        fitCanvas();
-    })();
     </script>
 </body>
+
 </html>

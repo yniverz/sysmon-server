@@ -1,0 +1,45 @@
+<!-- very simple starter detail page -->
+<h1 class="text-2xl font-semibold mb-4">{{ system.name }}</h1>
+
+<div class="grid gap-4 md:grid-cols-2 text-sm">
+  <div>
+    <h2 class="font-medium text-gray-700 mb-1">General</h2>
+    <ul class="list-disc list-inside">
+      <li><strong>ID:</strong> {{ system.id }}</li>
+      <li><strong>Type:</strong> {{ system.type }}</li>
+      {% if system.group %}<li><strong>Group:</strong> {{ system.group }}</li>{% endif %}
+      <li><strong>Site:</strong> {{ site.name }}</li>
+      <li><strong>Provider:</strong> {{ provider.name }}</li>
+    </ul>
+  </div>
+
+  {% if system.os %}
+  <div>
+    <h2 class="font-medium text-gray-700 mb-1">Operating System</h2>
+    <ul class="list-disc list-inside">
+      <li>{{ system.os.system }} {{ system.os.release }} ({{ system.os.version }})</li>
+      <li>Arch: {{ system.os.machine }} / {{ system.os.processor }}</li>
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if system.cpu %}
+  <div>
+    <h2 class="font-medium text-gray-700 mb-1">CPU</h2>
+    <ul class="list-disc list-inside">
+      <li>{{ system.cpu.physical_cores }} physical / {{ system.cpu.logical_cores }} logical cores</li>
+      <li>Max freq: {{ system.cpu.max_frequency_mhz }} MHz</li>
+      <li>Usage: {{ '%.1f'|format(system.cpu.usage_pct) }} %</li>
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if system.memory %}
+  <div>
+    <h2 class="font-medium text-gray-700 mb-1">Memory</h2>
+    <ul class="list-disc list-inside">
+      <li>{{ '%.1f'|format(system.memory.used_gib) }} / {{ '%.1f'|format(system.memory.total_gib) }} GiB used</li>
+    </ul>
+  </div>
+  {% endif %}
+</div>

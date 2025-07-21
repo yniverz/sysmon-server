@@ -4,7 +4,7 @@ from datetime import timedelta
 import json
 import time
 import uuid
-from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 import redis
 import waitress
@@ -78,8 +78,8 @@ class Dashboard:
             SECRET_KEY=uuid.uuid4().hex,
             WTF_CSRF_TIME_LIMIT=3600,
             SESSION_COOKIE_SECURE=not self.local_debug,       # only sent over HTTPS
-            SESSION_COOKIE_HTTPONLY=True,     # JS can’t read
-            SESSION_COOKIE_SAMESITE="Strict", # no cross-site requests
+            # SESSION_COOKIE_HTTPONLY=True,     # JS can’t read
+            # SESSION_COOKIE_SAMESITE="Strict", # no cross-site requests
             PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
         )
         self.app.jinja_env.globals["local_debug"] = local_debug
@@ -89,11 +89,11 @@ class Dashboard:
         self.app.errorhandler(404)(self.standard_error)
         self.app.errorhandler(405)(self.standard_error)
 
+        self.app.static_folder = 'core/static'
+
         self.app.add_url_rule('/', 'index', self.index)
         self.app.add_url_rule('/login', 'login', self.login, methods=['GET', 'POST'])
         self.app.add_url_rule('/logout', 'logout', self.logout)
-        self.app.add_url_rule('/system_image/<name>', 'system_image', self.system_image)
-        self.app.add_url_rule('/system/<system_id>', 'system_detail', self.system_detail)
 
 
 
@@ -138,16 +138,6 @@ class Dashboard:
         session.pop('logged_in', None)
         flash('Logged out successfully', 'success')
         return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
-    
-    def system_image(self, name: str) -> str:
-        if not session.get('logged_in'):
-            return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
-
-        variations = request.args.get('v', default='on').split(',')
-        try:
-            return SYSTEM_IMAGES.get(name, variations)
-        except ValueError:
-            abort(404)
 
     def _find_system(self, system_id: str):
         """
@@ -160,23 +150,7 @@ class Dashboard:
                     if sys.id == system_id:
                         return sys, site, prov
         return None, None, None
-
-    def system_detail(self, system_id: str):
-        if not session.get('logged_in'):
-            return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
-
-        system, site, provider = self._find_system(system_id)
-        if system is None:
-            abort(404)
-
-        return render_template(
-            "system_detail.jinja",          # create this tmpl when ready
-            system=system,
-            site=site,
-            provider=provider,
-            application_root=self.app.config["APPLICATION_ROOT"],
-        )
-
+    
     def index(self):
         if not session.get('logged_in'):
             return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))

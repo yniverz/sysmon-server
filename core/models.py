@@ -73,6 +73,7 @@ class System:
     network: SystemNetwork = None
     disks: list[SystemDisk] = None
     events: list[Event] = None
+    last_seen: int = 0
     group: str = ""
 
 class SiteType:

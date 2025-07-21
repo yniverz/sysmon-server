@@ -15,7 +15,7 @@ from models import model_registry
 
 @dataclass
 class Config:
-    dashboard_host: str = "0.0.0.0"
+    dashboard_host: str = "localhost"
     dashboard_port: int = 5000
     dashboard_application_root: str = ""
     dashboard_username: str = "admin"
