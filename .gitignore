@@ -6,6 +6,7 @@
 # App specific files
 structure.json
 data.json
+template_hash.txt
 
 # Apple specific files
 .DS_Store

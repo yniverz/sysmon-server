@@ -10,7 +10,8 @@
                         {
                             "id": "System1",
                             "name": "System One",
-                            "type": "laptop"
+                            "type": "laptop",
+                            "group": "OPTIONAL"
                         }
                     ]
                 }

@@ -13,29 +13,6 @@ class SystemDB:
         self.load_from_file()
 
     def create_structure(self):
-        # {
-        #     "providers": [
-        #         {
-        #             "name": "Provider1",
-        #             "sites": [
-        #                 {
-        #                     "name": "Site1",
-        #                     "type": "house",
-        #                     "systems": [
-        #                         {
-        #                             "id": "System1",
-        #                             "name": "System One",
-        #                             "type": "server",
-        #                             "group": "Group1"
-        #                         }
-        #                     ]
-        #                 }
-        #             ]
-        #         }
-        #     ]
-        # }
-
-        # load structure and create classes (clear existing data)
         self.providers = []
         if not os.path.exists(self.structure_path):
             print(f"Structure file {self.structure_path} does not exist.")
@@ -50,12 +27,12 @@ class SystemDB:
                         systems_data = site_data.get("systems", [])
                         systems = [System(**system) for system in systems_data]
 
-                    sites.append(Site(
-                        name=site_data["name"],
-                        type=site_data["type"],
-                        geoname=site_data.get("geoname", ""),
-                        systems=systems
-                    ))
+                        sites.append(Site(
+                            name=site_data["name"],
+                            type=site_data["type"],
+                            geoname=site_data.get("geoname", ""),
+                            systems=systems
+                        ))
 
                 self.providers.append(Provider(
                     name=provider_data["name"],
@@ -63,13 +40,33 @@ class SystemDB:
                     url=provider_data.get("url", "")
                 ))
 
+            # create a hash of the template file
+            file_hash = hash(json.dumps(structure, sort_keys=True))
+            with open("template_hash.txt", 'w') as f:
+                f.write(str(file_hash))
+
     def load_from_file(self):
         if not os.path.exists(self.data_path):
+            self.create_structure()
+            return
+        
+        if not os.path.exists("template_hash.txt"):
+            self.create_structure()
+            return
+    
+        with open("template_hash.txt", 'r') as f:
+            template_hash = f.read().strip()
+        with open(self.structure_path, 'r') as f:
+            structure = json.load(f)
+        current_hash = hash(json.dumps(structure, sort_keys=True))
+        if str(current_hash) != template_hash:
+            print("Template has changed, recreating structure.")
             self.create_structure()
             return
 
         with open(self.data_path, 'r') as f:
             self.providers = json.load(f, cls=DataclassJSONDecoder)
+
 
     def save_to_file(self):
         print(f"Saving {len(self.providers)} providers to {self.data_path}")

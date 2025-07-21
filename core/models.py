@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import dataclasses
 
 
 @dataclass
@@ -66,12 +67,12 @@ class System:
     name: str
     type: SystemType
 
-    os: SystemOS = None
-    cpu: SystemCPU = None
-    memory: SystemMemory = None
-    network: SystemNetwork = None
-    disks: list[SystemDisk] = None
-    events: list[Event] = None
+    os: SystemOS = SystemOS("", "", "", "", "")
+    cpu: SystemCPU = SystemCPU(0, 0, 0)
+    memory: SystemMemory = SystemMemory(0)
+    network: SystemNetwork = SystemNetwork("", "", "", {})
+    disks: list[SystemDisk] = dataclasses.field(default_factory=list)
+    events: list[Event] = dataclasses.field(default_factory=list)
     last_seen: int = 0
     group: str = ""
 
