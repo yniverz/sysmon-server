@@ -1,0 +1,20 @@
+{
+    "providers": [
+        {
+            "name": "Provider1",
+            "sites": [
+                {
+                    "name": "Site1",
+                    "type": "house",
+                    "systems": [
+                        {
+                            "id": "System1",
+                            "name": "System One",
+                            "type": "laptop"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

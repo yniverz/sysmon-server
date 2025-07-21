@@ -2,13 +2,13 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>SysMon Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Tailwind -->
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <script src="https://cdn.tailwindcss.com"></script>
+
     <style>
-        /* ── Animations ───────────────────────────────────────────────────── */
+        /* ─── card / tile hover ────────────────────────────── */
         .icon-box {
             transition: transform .15s ease;
         }
@@ -17,108 +17,80 @@
             transform: scale(1.05);
         }
 
-        /* hover +5 % */
-        .icon-box.pop {
-            transform: scale(1.15);
-        }
-
-        /* click +15 % */
         .tile-img {
             width: 96px;
             height: 96px;
             pointer-events: none;
         }
 
-        /* ── Modal overlay ───────────────────────────────────────────────── */
-        #modal-backdrop {
-            @apply fixed inset-0 bg-black bg-opacity-50 hidden;
-        }
-
-        #modal-wrapper {
-            @apply fixed inset-4 lg:inset-10 bg-white rounded-lg shadow-xl overflow-auto hidden;
-        }
-
-        /* smooth appear */
-        .fade-in {
-            animation: fade .15s ease-out forwards;
-        }
-
-        @keyframes fade {
-            from {
-                opacity: 0;
-                transform: scale(.96);
+        /* ─── modal ─────────────────────────────────────────── */
+        .backdrop {
+                {
+                # @apply fixed inset-0 bg-black/40 flex items-center justify-center z-50;
+                #
             }
 
-            to {
-                opacity: 1;
-            }
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            /* Ensure it is above other content */
+        }
+
+        .modal-box {
+            position: fixed;
+            top: 10%;
+            left: 10%;
+            width: 80%;
+            height: 80%;
+            z-index: 1000;
+            /* Ensure it is above other content */
+            background-color: white;
+            border-radius: 0.5rem;
+            /* Tailwind's rounded-xl */
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            /* Tailwind's shadow-lg */
+            padding: 1.5rem;
+            /* Tailwind's p-6 */
+            overflow-y: auto;
+            /* Allow scrolling if content overflows */
         }
     </style>
 </head>
 
 <body class="h-screen flex flex-col">
-    <!-- Header -->
+
+    <!-- ─── header / nav ───────────────────────────────── -->
     <header class="bg-gray-800 text-white px-6 py-3 flex justify-between items-center">
         <h1 class="text-xl font-semibold">SysMon Dashboard</h1>
         <nav class="space-x-4">
+            <button id="btn-back" class="hidden hover:underline">&larr;&nbsp;Back</button>
             <a href="{{ application_root + url_for('logout') }}" class="hover:underline">Logout</a>
         </nav>
     </header>
 
-    <!-- Main layout -->
-    <main class="flex flex-1 overflow-hidden">
-        <!-- Sidebar (left) -->
-        <aside class="w-64 bg-white border-r px-6 py-4 overflow-y-auto">
-            <h2 class="text-lg font-medium mb-4">Menu</h2>
-            <ul class="space-y-2">
-                <li><button class="filter-btn w-full text-left" data-filter="all">All systems</button></li>
-                <li><button class="filter-btn w-full text-left" data-filter="server">Servers</button></li>
-                <li><button class="filter-btn w-full text-left" data-filter="desktop">Desktops</button></li>
-                <li><button class="filter-btn w-full text-left" data-filter="mini_desktop">Mini‑Desktops</button></li>
-                <li><button class="filter-btn w-full text-left" data-filter="laptop">Laptops</button></li>
-                <li><button class="filter-btn w-full text-left" data-filter="mobile">Mobiles</button></li>
-            </ul>
-        </aside>
+    <!-- ─── main view mounts here ──────────────────────── -->
+    <main id="view" class="flex-1 overflow-auto p-6 bg-gray-50"></main>
 
-        <!-- Systems viewport -->
-        <section id="system-view" class="flex-1 overflow-auto p-6 bg-gray-50"></section>
-    </main>
+    <!-- root node the modal is mounted into (kept outside #view so it never scrolls) -->
+    <div id="modal-root"></div>
 
-    <!-- Modal markup (hidden by default) -->
-    <div id="modal-backdrop"></div>
-    <div id="modal-wrapper" class="p-6 flex flex-col">
-        <button id="modal-close" class="ml-auto text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
-        <div id="modal-body" class="mt-4"></div>
-    </div>
+    <!-- ─── provider/site/system data (JSON) ───────────── -->
+    <script id="sys-data" type="application/json">{{ providers | tojson }}</script>
 
-    <!-- Provider / site / system data -->
-    <script id="sys-data" type="application/json">{{ providers|tojson }}</script>
-
-    <!-- Client‑side renderer ------------------------------------------------ -->
+    <!-- ─── main script (ES‑module) ────────────────────── -->
     <script type="module">
         import { loadIcon } from "{{ url_for('static', filename='js/icon-loader.js') }}";
 
-        /* ── Helper functions (now hoisted) ─────────────────────────────────── */
-        function groupBy(arr, fn) {
-            return arr.reduce((m, o) => {
-                const k = fn(o);
-                (m[k] = m[k] || []).push(o);
-                return m;
-            }, {});
-        }
-
-        function chunk(arr, size) {
-            const out = [];
-            for (let i = 0; i < arr.length; i += size) {
-                out.push(arr.slice(i, i + size));
-            }
-            return out;
-        }
-
-        const COMPOSITE_CACHE = new Map();
-        const APP_ROOT = "{{ application_root }}";
-
-        /* per‑type stacking meta (same as util.SystemImage) */
+        /* ╔═══════════════════════════════════════════════════╗
+           ║  CONSTANTS, HELPERS & CACHED look‑ups             ║
+           ╚═══════════════════════════════════════════════════╝ */
         const META = {
             server: { max: 4, dx: 0, dy: -12 },
             desktop: { max: 2, dx: 20, dy: 10 },
@@ -126,145 +98,342 @@
             laptop: { max: 1, dx: 0, dy: 0 },
             mobile: { max: 1, dx: 0, dy: 0 },
         };
-        const TILE_PX = 96;     // draw size for each layer
-        const SOURCE_SIZE = 120;/* min composite canvas (≈ 96 + margins) */
+        const TILE_PX = 1000;
+        const SOURCE_SIZE = 1200;
+        const OFFLINE_SEC = 600;
 
-        /* ---------- build DOM ------------------------------------------------ */
-        const providers = JSON.parse(document.getElementById('sys-data').textContent || '[]');
-        const view = document.getElementById('system-view');
+        const nowSec = () => Math.floor(Date.now() / 1e3);
+        const isOnline = s => (nowSec() - s.last_seen) < OFFLINE_SEC;
+        const groupBy = (arr, fn) => arr.reduce((m, o) => ((m[fn(o)] ??= []).push(o), m), {});
+        const chunk = (arr, size) => (arr.map((_, i) => i % size ? 0 : arr.slice(i, i + size))).filter(Boolean);
 
-        providers.forEach(prov => {
-            const provWrap = section('mb-10');
-            provWrap.append(h('h2', 'text-xl font-semibold mb-4 border-b border-gray-300 pb-1', prov.name));
+        function h(tag, cls = '', txt = '', attr = {}) {
+            const el = document.createElement(tag);
+            if (cls) el.className = cls;
+            if (txt !== null && txt !== undefined && txt !== '') el.textContent = txt;
 
-            prov.sites.forEach(site => {
-                const siteWrap = section('mb-8 pl-4 border-l border-gray-200');
-                siteWrap.append(h('h3', 'text-base font-medium mb-3 text-gray-700',
-                    `${site.name} (${site.type})`));
-
-                const byGroup = groupBy(site.systems, s => s.group || '');
-                Object.entries(byGroup).forEach(([grp, list]) => {
-                    const grpWrap = h('div', 'mb-6');
-                    if (grp) grpWrap.append(h('h4', 'text-sm font-semibold text-gray-600 mb-1', grp));
-
-                    const grid = h('div', 'grid gap-4',
-                        null, { style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr));' });
-                    grpWrap.append(grid); siteWrap.append(grpWrap);
-
-                    const byType = groupBy(list, s => s.type);
-                    Object.entries(byType).forEach(([type, arr]) => {
-                        const { max } = META[type];
-                        for (const stack of chunk(arr, max)) {
-                            const tile = h('div', 'text-center');
-                            const box = h('a', 'icon-box inline-block',
-                                null, {
-                                href: `${APP_ROOT}/system_details?id=${stack.at(-1).id}`,
-                                'data-type': type
-                            });
-
-                            composeIcon(type, stack).then(url => {
-                                const img = h('img', 'tile-img', null, { src: url, alt: type });
-                                box.append(img);
-                            });
-
-                            box.addEventListener('click', ev => {
-                                ev.preventDefault();
-                                openModal(box.getAttribute('href'));
-                            });
-
-                            tile.append(box);
-                            tile.append(h('span', 'block mt-1 text-sm truncate',
-                                stack.length > 1 ? `${stack.length}× ${type}` : stack[0].name));
-                            grid.append(tile);
-                        }
-                    });
-                });
-
-                provWrap.append(siteWrap);
-            });
-            view.append(provWrap);
-        });
-
-        /* ---------- composite builder (Canvas) ------------------------------- */
-        async function composeIcon(type, stack) {
-            const key = type + '|' + stack.map(s => s.icon_layers?.join('+') || 'on').join(';');
-            if (COMPOSITE_CACHE.has(key)) return COMPOSITE_CACHE.get(key);
-
-            const { dx, dy } = META[type];
-            const parts = [];
-            for (let i = 0; i < stack.length; i++) {
-                const sys = stack[i];
-                const layers = sys.icon_layers ?? ['on'];
-                for (const layer of layers) {
-                    parts.push({ img: await loadIcon(type, layer), ox: i * dx, oy: i * dy });
+            Object.entries(attr).forEach(([k, v]) => {
+                if (k in el) {  // Handles known properties like onclick, value, etc.
+                    el[k] = v;
+                } else {
+                    el.setAttribute(k, v);
                 }
+            });
+
+            return el;
+        }
+
+        /* ╔═══════════════════════════════════════════════════╗
+           ║  MODAL HELPERS                                   ║
+           ╚═══════════════════════════════════════════════════╝ */
+        const modalRoot = document.getElementById('modal-root');
+        let openModalId = null;                   // id of system currently shown
+
+        function usageBar(pct) {
+            const outer = h('div', 'w-full h-2 bg-gray-200 rounded-full mb-2');
+            outer.append(h('div', 'h-full bg-green-500 rounded-full',
+                null, { style: `width:${Math.min(100, pct)}%` }));
+            return outer;
+        }
+
+        function systemDeepLink(sys) {
+            // keep whichever site/group hash is already present and append /sys:<id>
+            const base = location.hash.split('/sys:')[0];      // strip old sys part
+            return `${base}/sys:${encodeURIComponent(sys.id)}`;
+        }
+
+
+        function openSystemModal(system, push = true) {
+            console.log('openSystemModal', system.id, push);
+
+            if (openModalId === system.id) return;            // already open
+            closeSystemModal(false);
+
+            /* backdrop */
+            const backdrop = h('div', 'backdrop', null, { id: 'sys-modal' });
+            backdrop.onclick = ev => { if (ev.target === backdrop) history.back(); };
+
+            /* modal box */
+            const box = h('div', 'modal-box');
+            box.append(h('button',
+                'absolute top-3 right-4 text-2xl leading-none hover:text-red-500',
+                '×', { type: 'button', onclick: () => history.back() }));
+
+            /* header */
+            box.append(h('h2', 'text-xl font-semibold mb-4 flex items-center',
+                `${system.name} `));
+            /* online badge */
+            box.lastChild.append(h('span',
+                isOnline(system) ? 'ml-2 px-2 py-0.5 rounded text-xs bg-green-200 text-green-800'
+                    : 'ml-2 px-2 py-0.5 rounded text-xs bg-red-200 text-red-800',
+                isOnline(system) ? 'online' : 'offline'));
+
+            /* basic facts */
+            const facts = h('ul', 'text-sm mb-4 space-y-1');
+            facts.append(h('li', '', `CPU: ${system.cpu?.physical_cores ?? '–'}c /
+                                   ${system.cpu?.logical_cores ?? '–'}t ⟫
+                                   ${system.cpu?.max_frequency_mhz ?? '–'} MHz`));
+            facts.append(h('li', '', `OS: ${system.os?.system ?? '–'} ${system.os?.release ?? ''}`));
+            facts.append(h('li', '', `Hostname: ${system.network?.hostname ?? '–'}`));
+            box.append(facts);
+
+            /* usage bars ---------------------------------------------------------- */
+            if (system.cpu) {
+                box.append(h('h3', 'font-medium mt-4 mb-1', 'CPU'));
+                box.append(usageBar(system.cpu.usage_pct));
             }
+            if (system.memory) {
+                const pct = system.memory.total_gib ? (system.memory.used_gib /
+                    system.memory.total_gib * 100) : 0;
+                box.append(h('h3', 'font-medium mt-4 mb-1', 'Memory'));
+                box.append(usageBar(pct));
+            }
+            if (Array.isArray(system.disks)) {
+                system.disks.forEach(d => {
+                    const pct = d.total_gib ? (d.used_gib / d.total_gib * 100) : 0;
+                    box.append(h('h3', 'font-medium mt-4 mb-1',
+                        `Disk ${d.mountpoint || d.device}`));
+                    box.append(usageBar(pct));
+                });
+            }
+
+            backdrop.append(box);
+            modalRoot.append(backdrop);
+            openModalId = system.id;
+
+            if (push) history.pushState({ idx: stack.length - 1, modal: system.id },
+                '', systemDeepLink(system));
+        }
+
+        function closeSystemModal(goBack = false) {
+            const node = document.getElementById('sys-modal');
+            if (node) node.remove();
+            openModalId = null;
+            if (goBack) history.back();
+        }
+
+
+        /* ╔═══════════════════════════════════════════════════╗
+           ║  DATA & VIEW STATE                               ║
+           ╚═══════════════════════════════════════════════════╝ */
+        const providers = JSON.parse(document.getElementById('sys-data').textContent || '[]');
+        const allSites = providers.flatMap(p => p.sites);
+        const allMachines = allSites.flatMap(s => s.systems);
+
+        const view = document.getElementById('view');
+        const backBtn = document.getElementById('btn-back');
+
+        /* ╔═══════════════════════════════════════════════════╗
+           ║  ICON COMPOSITION                                ║
+           ╚═══════════════════════════════════════════════════╝ */
+        const ICON_CACHE = new Map();
+        async function composeIcon(type, stack) {
+            const layers = stack.map(s => isOnline(s) ? 'on' : 'off');
+            const cacheKey = `${type}|${layers.join('+')}`;
+            if (ICON_CACHE.has(cacheKey)) return ICON_CACHE.get(cacheKey);
+
+            const { dx, dy, max } = META[type];
+            const parts = stack.slice(0, max).map((s, i) => ({ ox: i * dx, oy: i * dy, layer: layers[i] }));
+            await Promise.all(parts.map(async p => { p.img = await loadIcon(type, p.layer); }));
 
             const minX = Math.min(0, ...parts.map(p => p.ox));
             const minY = Math.min(0, ...parts.map(p => p.oy));
             const maxX = Math.max(...parts.map(p => p.ox + TILE_PX));
             const maxY = Math.max(...parts.map(p => p.oy + TILE_PX));
-            const M = 10, cropW = maxX - minX + M * 2, cropH = maxY - minY + M * 2;
-            const W = Math.max(cropW, SOURCE_SIZE), H = Math.max(cropH, SOURCE_SIZE);
+            const M = 10;
+            const cW = maxX - minX + M * 2;
+            const cH = maxY - minY + M * 2;
+            const W = Math.max(cW, SOURCE_SIZE);
+            const H = Math.max(cH, SOURCE_SIZE);
 
-            const cvs = new OffscreenCanvas(W, H), ctx = cvs.getContext('2d');
-            parts.forEach(p => {
-                ctx.drawImage(p.img,
-                    Math.round((W - cropW) / 2 + M + p.ox - minX),
-                    Math.round((H - cropH) / 2 + M + p.oy - minY),
-                    TILE_PX, TILE_PX);
-            });
+            const cvs = new OffscreenCanvas(W, H);
+            const ctx = cvs.getContext('2d');
+            parts.forEach(p => ctx.drawImage(p.img,
+                Math.round((W - cW) / 2 + M + p.ox - minX),
+                Math.round((H - cH) / 2 + M + p.oy - minY),
+                TILE_PX, TILE_PX));
 
-            const url = await cvs.convertToBlob({ type: 'image/png' }).then(b => blobToDataURL(b));
-            COMPOSITE_CACHE.set(key, url); return url;
-        }
-        const blobToDataURL = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
-
-        /* ---------- Modal logic --------------------------------------------- */
-        const backdrop = document.getElementById('modal-backdrop');
-        const wrapper = document.getElementById('modal-wrapper');
-        const body = document.getElementById('modal-body');
-        document.getElementById('modal-close').onclick = closeModal;
-        backdrop.onclick = closeModal;
-
-        function openModal(url) {
-            backdrop.classList.remove('hidden');
-            wrapper.classList.remove('hidden'); wrapper.classList.add('fade-in');
-            body.innerHTML = '<p class="text-gray-500">Loading…</p>';
-
-            fetch(url, { credentials: 'include' })          //  ← new
-                .then(resp => {
-                    if (resp.redirected && resp.url.includes('/login')) {
-                        throw new Error('login');
-                    }
-                    return resp.text();
-                })
-                .then(html => { body.innerHTML = html; })
-                .catch(() => { body.innerHTML = '<p class="text-red-600">Failed to load details.</p>'; });
-        }
-        function closeModal() {
-            wrapper.classList.add('hidden'); backdrop.classList.add('hidden'); body.innerHTML = '';
+            const url = await cvs.convertToBlob({ type: 'image/png' })
+                .then(b => new Promise(res => {
+                    const fr = new FileReader();
+                    fr.onload = () => res(fr.result);
+                    fr.readAsDataURL(b);
+                }));
+            ICON_CACHE.set(cacheKey, url);
+            return url;
         }
 
-        /* ---------- sidebar filtering --------------------------------------- */
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const filter = btn.dataset.filter;
-                document.querySelectorAll('[data-type]').forEach(t => {
-                    t.style.display = filter === 'all' || t.dataset.type === filter ? '' : 'none';
-                });
-            });
+        /* ╔═══════════════════════════════════════════════════╗
+           ║  HISTORY STACK & ROUTER                          ║
+           ╚═══════════════════════════════════════════════════╝ */
+        const stack = [];
+        history.replaceState({ idx: 0 }, '');
+
+        backBtn.onclick = () => history.back();
+        window.addEventListener('popstate', ev => {
+            console.log('popstate', ev.state?.modal, ev.state?.idx);
+            const idx = ev.state?.idx ?? 0;
+            const modalId = ev.state?.modal ?? null;
+            // (1) handle modal first
+            if (openModalId) {               // modal was open but state says closed
+                closeSystemModal(false);
+                return;                               // don’t touch the main view
+            }
+
+            while (stack.length > idx) stack.pop();
+            const { fn, args } = stack.at(-1);
+            fn(...args, false);
+            backBtn.classList.toggle('hidden', stack.length === 1);
         });
 
-        /* ---------- helpers -------------------------------------------------- */
-        function h(tag, cls = '', txt = '', attr = {}) {
-            const el = document.createElement(tag);
-            if (cls) el.className = cls; if (txt) el.textContent = txt;
-            Object.entries(attr).forEach(([k, v]) => el.setAttribute(k, v));
-            return el;
+        function pushView(fn, args, url = '#') {
+            stack.push({ fn, args });
+            fn(...args, true);
+            history.pushState({ idx: stack.length - 1 }, '', url);
+            backBtn.classList.remove('hidden');
         }
-        function section(cls = '') { return h('section', cls); }
 
+        function silentReplaceHash() {
+            history.replaceState({ idx: stack.length - 1 }, '', location.hash);
+        }
+
+        /* ╔═══════════════════════════════════════════════════╗
+           ║  PROVIDER / SITE / GROUP VIEWS                    ║
+           ╚═══════════════════════════════════════════════════╝ */
+        renderProviders(false);
+        stack.push({ fn: renderProviders, args: [false] });
+
+        function renderProviders(push = true) {
+            view.innerHTML = '';
+            backBtn.classList.add('hidden');
+            providers.forEach(p => {
+                const sec = h('section', 'mb-10');
+                sec.append(h('h2', 'text-xl font-semibold mb-4 border-b border-gray-300 pb-1', p.name));
+                p.sites.forEach(site => sec.append(siteCard(site)));
+                view.append(sec);
+            });
+            if (push) history.replaceState({ idx: 0 }, '', location.hash);
+        }
+
+        function siteCard(site) {
+            const card = h('div', 'inline-block m-3 p-2 rounded-lg bg-white shadow icon-box cursor-pointer');
+            card.title = `${site.name} – ${site.systems.length} devices`;
+            card.onclick = () => pushView(renderSite, [site], `#site:${encodeURIComponent(site.name)}`);
+
+            const grid = h('div', 'grid gap-2', null, { style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr));' });
+            Object.entries(groupBy(site.systems, s => s.type)).forEach(([type, systems]) => {
+                chunk(systems, META[type].max).forEach(async stackChunk => {
+                    const url = await composeIcon(type, stackChunk);
+                    const cell = h('div', 'text-center');
+                    cell.append(h('img', 'tile-img block mx-auto', null, { src: url }));
+                    cell.append(h('span', 'block text-xs truncate mt-1',
+                        stackChunk.length > 1 ? `${stackChunk.length}× ${type}` : stackChunk[0].name));
+                    grid.append(cell);
+                });
+            });
+            card.append(grid);
+            return card;
+        }
+
+        function renderSite(site, push = true) {
+            view.innerHTML = '';
+            view.append(h('h2', 'text-xl font-semibold mb-6', site.name));
+
+            const byGroup = groupBy(site.systems, s => s.group || '');
+            Object.entries(byGroup).filter(([g]) => g).forEach(([grp, list]) => {
+                view.append(h('h3', 'text-base font-medium mb-2 text-gray-700', grp));
+                view.append(groupCard(grp, list));
+            });
+
+            const ungrouped = byGroup[''] || [];
+            if (ungrouped.length) {
+                const grid = h('div', 'grid gap-4 mb-6', null,
+                    { style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr));' });
+                ungrouped.forEach(async sys => {
+                    const url = await composeIcon(sys.type, [sys]);
+                    const tile = h('div', 'icon-box block text-center cursor-pointer');
+                    tile.onclick = () => openSystemModal(sys);
+                    tile.append(h('img', 'tile-img mx-auto', null, { src: url }));
+                    tile.append(h('span', 'block text-xs truncate mt-1', sys.name));
+                    grid.append(tile);
+                });
+                view.append(grid);
+            }
+            if (push) silentReplaceHash();
+        }
+
+        function groupCard(groupName, systems) {
+            const card = h('div', 'inline-block m-1 p-2 rounded-lg bg-white shadow icon-box cursor-pointer');
+            card.title = `${systems.length} devices`;
+            card.onclick = () => pushView(renderGroup, [groupName], `#group:${encodeURIComponent(groupName)}`);
+
+            const grid = h('div', 'grid gap-2', null, { style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr));' });
+            Object.entries(groupBy(systems, s => s.type)).forEach(([type, arr]) => {
+                chunk(arr, META[type].max).forEach(async stackChunk => {
+                    const url = await composeIcon(type, stackChunk);
+                    const cell = h('div', 'text-center');
+                    cell.append(h('img', 'tile-img block mx-auto', null, { src: url }));
+                    cell.append(h('span', 'block text-xs truncate mt-1',
+                        stackChunk.length > 1 ? `${stackChunk.length}× ${type}` : stackChunk[0].name));
+                    grid.append(cell);
+                });
+            });
+            card.append(grid);
+            return card;
+        }
+
+        function renderGroup(groupName, push = true) {
+            const machines = allMachines.filter(m => m.group === groupName);
+            view.innerHTML = '';
+            view.append(h('h2', 'text-xl font-semibold mb-6', groupName));
+
+            const grid = h('div', 'grid gap-4', null,
+                { style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr));' });
+            machines.forEach(async m => {
+                const url = await composeIcon(m.type, [m]);
+                const tile = h('div', 'icon-box block text-center cursor-pointer');
+                tile.onclick = () => openSystemModal(m);
+                tile.append(h('img', 'tile-img mx-auto', null, { src: url }));
+                tile.append(h('span', 'block text-xs truncate mt-1', m.name));
+                grid.append(tile);
+            });
+            view.append(grid);
+            if (push) silentReplaceHash();
+        }
+
+        /* ╔═══════════════════════════════════════════════════╗
+           ║  DEEP‑LINKS ON INITIAL LOAD                       ║
+           ╚═══════════════════════════════════════════════════╝ */
+        handleInitialHash();
+        function handleInitialHash() {
+            const hash = location.hash.slice(1);
+            if (!hash) return;
+
+            const parts = hash.split('/');
+            const [kind, raw] = parts[0].split(':');
+            const value = decodeURIComponent(raw || '');
+
+            switch (kind) {
+                case 'site': {
+                    const site = allSites.find(s => s.name === value);
+                    if (site) pushView(renderSite, [site], location.hash);
+                    break;
+                }
+                case 'group': {
+                    pushView(renderGroup, [value], location.hash);
+                    break;
+                }
+            }
+            
+            const sysMatch = location.hash.match(/\/sys:([^/]+)/);
+            if (sysMatch) {
+                const sysId = decodeURIComponent(sysMatch[1]);
+                const sys = allMachines.find(s => s.id === sysId);
+                if (sys) {
+                    pushView(openSystemModal, [sys], location.hash);
+                }
+            }
+        }
     </script>
 </body>
 

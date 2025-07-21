@@ -25,7 +25,6 @@ class SystemMemory:
 class SystemNetwork:
     hostname: str
     fqdn: str
-    local_ip: str
     public_ip: str
     interfaces: dict[str, list[str]]  # if_name: list of ip’s
 
