@@ -53,7 +53,7 @@
     <script type="module">
         import { loadIcon } from '/static/js/icon-loader.js';
 
-        const { createApp, ref, computed, onMounted } = Vue;
+        const { createApp, ref, computed, onMounted, watch } = Vue;
         const { createRouter, createWebHashHistory, useRoute, RouterLink } = VueRouter;
 
         const providers = {{ providers | tojson | safe }};
@@ -63,7 +63,7 @@
         const META = {
             server: { max: 4, dx: 0, dy: -55 },
             desktop: { max: 2, dx: 93, dy: 45 },
-            mini_desktop: { max: 4, dx: 32, dy: 15 },
+            mini_desktop: { max: 5, dx: 32, dy: 15 },
             laptop: { max: 1, dx: 0, dy: 0 },
             mobile: { max: 1, dx: 0, dy: 0 },
         };
@@ -385,22 +385,32 @@
       </div>
     `,
             setup() {
-                const route = useRoute();
-                const site = useSite(route.params.site);
-                const groupParam = route.params.group;
-                const group = groupParam === '-' ? '' : groupParam;
-                const machines = useGroup(site, group);
-                const groupLabel = computed(() => group || '– ungrouped –');
-                const sysIcons = ref({});
+  const route = useRoute();
+  const site = useSite(route.params.site);
 
-                onMounted(async () => {
-                    for (const m of machines.value) {
-                        sysIcons.value[m.id] = await composeIcon(m.type, [m]);
-                    }
-                });
+  const group = computed(() => route.params.group === '-' ? '' : route.params.group);
+  const groupLabel = computed(() => group.value || '– ungrouped –');
+  const machines = computed(() => site.value.systems.filter(s => (s.group || '') === group.value));
+  const sysIcons = ref({});
 
-                return { machines, groupLabel, sysIcons };
-            }
+  const loadIcons = async () => {
+    const icons = {};
+    for (const m of machines.value) {
+      icons[m.id] = await composeIcon(m.type, [m]);
+    }
+    sysIcons.value = icons;
+  };
+
+  onMounted(loadIcons);
+
+  // 🔁 Watch route param changes and reload icons
+  watch(() => route.params.group, async () => {
+    await loadIcons();
+  });
+
+  return { machines, groupLabel, sysIcons };
+}
+
         };
 
         const SysModal = {
