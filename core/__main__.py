@@ -13,6 +13,10 @@ def load_config():
             config_data = toml.load(f)
             cfg.dashboard_host = config_data.get('dashboard', {}).get('host', cfg.dashboard_host)
             cfg.dashboard_port = config_data.get('dashboard', {}).get('port', cfg.dashboard_port)
+            cfg.dashboard_username = config_data.get('dashboard', {}).get('username', cfg.dashboard_username)
+            cfg.dashboard_password = config_data.get('dashboard', {}).get('password', cfg.dashboard_password)
+            cfg.dashboard_application_root = config_data.get('dashboard', {}).get('application_root', cfg.dashboard_application_root)
+            # websocket config
             cfg.websocket_host = config_data.get('websocket', {}).get('host', cfg.websocket_host)
             cfg.websocket_port = config_data.get('websocket', {}).get('port', cfg.websocket_port)
             return cfg
@@ -28,29 +32,6 @@ if __name__ == "__main__":
 
     receiver = server.SystemReceiver(cfg.websocket_host, cfg.websocket_port)
     receiver.start()
-
-    # receiver.db.add_provider(models.Provider(name="Default Provider", sites=[]))
-    # receiver.db.add_site("Default Provider", models.Site(
-    #     name="Default Site 1",
-    #     type="house",
-    #     geoname="Default Location",
-    #     systems=[]
-    # ))
-    # receiver.db.add_system("Default Site 1", models.System(
-    #     id="default_system2",
-    #     name="Default System 2",
-    #     type="server"
-    # ))
-    # receiver.db.add_system("Default Site", models.System(
-    #     id="2",
-    #     name="System2",
-    #     type="server"
-    # ))
-    # receiver.db.add_system("Default Site", models.System(
-    #     id="5",
-    #     name="System3",
-    #     type="desktop"
-    # ))
 
     web_server = web.Dashboard(cfg, receiver, local_debug=True)
     web_server.run()
