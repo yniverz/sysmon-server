@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Network Configuration</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px auto;
+            padding: 0 20px;
+            max-width: 1000px;
+            background-color: #f4f6f8;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        section {
+            background: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 40px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .group {
+            margin-top: 20px;
+            margin-left: 30px;
+            padding-left: 20px;
+            border-left: 3px solid #e0e0e0;
+        }
+
+        .form-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            width: 120px;
+            font-weight: 600;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group input[type="url"] {
+            flex: 1;
+            padding: 6px 10px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .form-group input[type="checkbox"] {
+            transform: scale(1.2);
+            margin-left: 4px;
+        }
+
+        .form-actions {
+            margin-top: 10px;
+        }
+
+        .form-actions input[type="submit"],
+        .btn-inline {
+            padding: 6px 14px;
+            font-size: 14px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .btn-inline {
+            background-color: #555;
+        }
+
+        .btn-inline:hover,
+        .form-actions input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+
+        .read-only-block {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 10px 0;
+            font-size: 15px;
+            padding: 10px;
+            background: #f9fafb;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 20px 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        h2, h3, h4 {
+            margin-bottom: 15px;
+            color: #222;
+        }
+    </style>
+</head>
+<body>
+    <h1>Network Editor</h1>
+    
+    <div style="text-align: right; margin-bottom: 20px;">
+        <a href="{{ url_for('index') }}" class="btn-inline">Back to Dashboard</a>
+    </div>
+
+    <form method="post">
+        <h2>Add New Provider</h2>
+        <input type="hidden" name="action" value="add_provider">
+        <div class="form-group">
+            <label for="prov-name">Name:</label>
+            <input type="text" id="prov-name" name="name" required>
+        </div>
+        <div class="form-group">
+            <label for="prov-url">URL:</label>
+            <input type="url" id="prov-url" name="url">
+        </div>
+        <div class="form-actions">
+            <input type="submit" value="Add Provider">
+        </div>
+    </form>
+
+    {% for provider in providers %}
+    <section>
+        <h2>Provider: {{ provider.name }}</h2>
+
+        <div class="read-only-block">
+            <div><strong>Name:</strong> {{ provider.name }}</div>
+            <div><strong>URL:</strong> {{ provider.url }}</div>
+            <button class="btn-inline" onclick="toggleForm('provider-{{ loop.index }}')">Edit</button>
+        </div>
+
+        <form method="post" id="provider-{{ loop.index }}" class="hidden">
+            <input type="hidden" name="action" value="edit_provider">
+            <input type="hidden" name="name" value="{{ provider.name }}">
+            <div class="form-group">
+                <label>New Name:</label>
+                <input type="text" name="new_name" value="{{ provider.name }}">
+            </div>
+            <div class="form-group">
+                <label>URL:</label>
+                <input type="url" name="url" value="{{ provider.url }}">
+            </div>
+            <div class="form-actions">
+                <input type="submit" value="Update Provider">
+            </div>
+        </form>
+
+        <form method="post" style="margin-top: 10px;">
+            <input type="hidden" name="action" value="remove_provider">
+            <input type="hidden" name="name" value="{{ provider.name }}">
+            <input type="submit" value="Remove Provider" class="btn-inline" style="background-color: #c62828;">
+        </form>
+
+        <hr>
+
+        <form method="post">
+            <h3>Add Site to {{ provider.name }}</h3>
+            <input type="hidden" name="action" value="add_site">
+            <input type="hidden" name="provider_name" value="{{ provider.name }}">
+            <div class="form-group">
+                <label>Site Name:</label>
+                <input type="text" name="site_name" required>
+            </div>
+            <div class="form-group">
+                <label>Type:</label>
+                <input type="text" name="type" required>
+            </div>
+            <div class="form-group">
+                <label><a href="https://www.geonames.org/v3" target="_blank">Geoname:</a></label>
+                <input type="text" name="geoname">
+            </div>
+            <div class="form-actions">
+                <input type="submit" value="Add Site">
+            </div>
+        </form>
+
+        {% for site in provider.sites %}
+        <div class="group">
+            <h3>Site: {{ site.name }}</h3>
+
+            <div class="read-only-block">
+                <div><strong>Name:</strong> {{ site.name }}</div>
+                <div><strong>Type:</strong> {{ site.type }}</div>
+                <div><strong>Geoname:</strong> {{ site.geoname }}</div>
+                <button class="btn-inline" onclick="toggleForm('site-{{ loop.index }}-{{ provider.name }}')">Edit</button>
+            </div>
+
+            <form method="post" id="site-{{ loop.index }}-{{ provider.name }}" class="hidden">
+                <input type="hidden" name="action" value="edit_site">
+                <input type="hidden" name="provider_name" value="{{ provider.name }}">
+                <input type="hidden" name="site_name" value="{{ site.name }}">
+                <div class="form-group">
+                    <label>New Name:</label>
+                    <input type="text" name="new_name" value="{{ site.name }}">
+                </div>
+                <div class="form-group">
+                    <label>Type:</label>
+                    <input type="text" name="type" value="{{ site.type }}">
+                </div>
+                <div class="form-group">
+                    <label>Geoname:</label>
+                    <input type="text" name="geoname" value="{{ site.geoname }}">
+                </div>
+                <div class="form-actions">
+                    <input type="submit" value="Update Site">
+                </div>
+            </form>
+
+            <form method="post">
+                <input type="hidden" name="action" value="remove_site">
+                <input type="hidden" name="provider_name" value="{{ provider.name }}">
+                <input type="hidden" name="site_name" value="{{ site.name }}">
+                <input type="submit" value="Remove Site" class="btn-inline" style="background-color: #c62828;">
+            </form>
+
+            <hr>
+
+            <form method="post">
+                <h4>Add System to {{ site.name }}</h4>
+                <input type="hidden" name="action" value="add_system">
+                <input type="hidden" name="site_name" value="{{ site.name }}">
+                <div class="form-group">
+                    <label>ID:</label>
+                    <input type="text" name="id" required>
+                </div>
+                <div class="form-group">
+                    <label>Name:</label>
+                    <input type="text" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label>Type:</label>
+                    <input type="text" name="type" required>
+                </div>
+                <div class="form-group">
+                    <label>Group:</label>
+                    <input type="text" name="group">
+                </div>
+                <div class="form-actions">
+                    <input type="submit" value="Add System">
+                </div>
+            </form>
+
+            {% for system in site.systems %}
+            <div class="group">
+                <h4>System: {{ system.name }} ({{ system.id }})</h4>
+
+                <div class="read-only-block">
+                    <div><strong>Name:</strong> {{ system.name }}</div>
+                    <div><strong>Type:</strong> {{ system.type }}</div>
+                    <div><strong>Group:</strong> {{ system.group }}</div>
+                    <div><strong>Status:</strong>
+                        {% if system.critical %} 🔴 Critical
+                        {% elif system.warning %} 🟠 Warning
+                        {% elif system.connected %} 🟢 Connected
+                        {% else %} ⚪ Offline
+                        {% endif %}
+                    </div>
+                    <button class="btn-inline" onclick="toggleForm('system-{{ system.id }}')">Edit</button>
+                </div>
+
+                <form method="post" id="system-{{ system.id }}" class="hidden">
+                    <input type="hidden" name="action" value="edit_system">
+                    <input type="hidden" name="system_id" value="{{ system.id }}">
+                    <div class="form-group">
+                        <label>Name:</label><input type="text" name="name" value="{{ system.name }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Type:</label><input type="text" name="type" value="{{ system.type }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Group:</label><input type="text" name="group" value="{{ system.group }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Connected:</label><input type="checkbox" name="connected" {% if system.connected %}checked{% endif %}>
+                        <label>Warning:</label><input type="checkbox" name="warning" {% if system.warning %}checked{% endif %}>
+                        <label>Critical:</label><input type="checkbox" name="critical" {% if system.critical %}checked{% endif %}>
+                    </div>
+                    <div class="form-actions">
+                        <input type="submit" value="Update System">
+                    </div>
+                </form>
+
+                <form method="post">
+                    <input type="hidden" name="action" value="remove_system">
+                    <input type="hidden" name="system_id" value="{{ system.id }}">
+                    <input type="submit" value="Remove System" class="btn-inline" style="background-color: #c62828;">
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endfor %}
+
+    <!-- Scroll memory -->
+    <script>
+        (function () {
+            const KEY = 'admin-scroll-top';
+
+            window.addEventListener('beforeunload', () => {
+                localStorage.setItem(KEY, window.scrollY);
+            });
+
+            window.addEventListener('load', () => {
+                const y = localStorage.getItem(KEY);
+                if (y !== null) {
+                    window.scrollTo(0, parseInt(y));
+                }
+            });
+        })();
+
+        function toggleForm(id) {
+            const form = document.getElementById(id);
+            if (form) {
+                form.classList.toggle('hidden');
+                // form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    </script>
+</body>
+</html>

@@ -45,6 +45,44 @@ class SystemDB:
             with open("template_hash.txt", 'w') as f:
                 f.write(str(file_hash))
 
+    def generate_structure_file(self):
+        structure = {
+            "providers": []
+        }
+
+        for provider in self.providers:
+            provider_data = {
+                "name": provider.name,
+                "sites": []
+            }
+
+            for site in provider.sites:
+                site_data = {
+                    "name": site.name,
+                    "type": site.type,
+                    "systems": []
+                }
+
+                for system in site.systems:
+                    system_data = {
+                        "id": system.id,
+                        "name": system.name,
+                        "type": system.type
+                    }
+                    if system.group:
+                        system_data["group"] = system.group
+
+                    site_data["systems"].append(system_data)
+
+                provider_data["sites"].append(site_data)
+
+            structure["providers"].append(provider_data)
+
+        with open(self.structure_path, "w", encoding="utf-8") as f:
+            import json
+            json.dump(structure, f, indent=4, ensure_ascii=False)
+
+
     def load_from_file(self):
         if not os.path.exists(self.data_path):
             self.create_structure()
@@ -69,9 +107,16 @@ class SystemDB:
 
 
     def save_to_file(self):
-        print(f"Saving {len(self.providers)} providers to {self.data_path}")
+        sorted_providers = sorted(self.providers, key=lambda p: p.name.lower())
+        for provider in sorted_providers:
+            provider.sites = sorted(provider.sites, key=lambda s: s.name.lower())
+            for site in provider.sites:
+                site.systems = sorted(site.systems, key=lambda sys: sys.name.lower())
+
         with open(self.data_path, 'w') as f:
-            json.dump(self.providers, f, cls=DataclassJSONEncoder)
+            json.dump(sorted_providers, f, cls=DataclassJSONEncoder)
+
+        self.generate_structure_file()
 
 
     def get_system(self, system_id: str) -> System | None:
@@ -116,3 +161,70 @@ class SystemDB:
                     self.save_to_file()
                     return system
         raise ValueError(f"Site {site_name} not found.")
+    
+    def remove_system(self, system_id: str):
+        for provider in self.providers:
+            for site in provider.sites:
+                for system in site.systems:
+                    if system.id == system_id:
+                        site.systems.remove(system)
+                        self.save_to_file()
+                        return system
+        raise ValueError(f"System with ID {system_id} not found.")
+    
+    def remove_site(self, provider_name: str, site_name: str):
+        for provider in self.providers:
+            if provider.name == provider_name:
+                for site in provider.sites:
+                    if site.name == site_name:
+                        provider.sites.remove(site)
+                        self.save_to_file()
+                        return site
+        raise ValueError(f"Site {site_name} not found in provider {provider_name}.")
+    
+    def remove_provider(self, provider_name: str):
+        for provider in self.providers:
+            if provider.name == provider_name:
+                self.providers.remove(provider)
+                self.save_to_file()
+                return provider
+        raise ValueError(f"Provider {provider_name} not found.")
+    
+    def edit_system(self, system_id: str, **kwargs):
+        system = self.get_system(system_id)
+        if not system:
+            raise ValueError(f"System with ID {system_id} not found.")
+
+        for key, value in kwargs.items():
+            if hasattr(system, key):
+                setattr(system, key, value)
+            else:
+                raise ValueError(f"Invalid attribute {key} for System.")
+
+        self.save_to_file()
+
+    def edit_site(self, provider_name: str, site_name: str, **kwargs):
+        for provider in self.providers:
+            if provider.name == provider_name:
+                for site in provider.sites:
+                    if site.name == site_name:
+                        for key, value in kwargs.items():
+                            if hasattr(site, key):
+                                setattr(site, key, value)
+                            else:
+                                raise ValueError(f"Invalid attribute {key} for Site.")
+                        self.save_to_file()
+                        return site
+        raise ValueError(f"Site {site_name} not found in provider {provider_name}.")
+    
+    def edit_provider(self, provider_name: str, **kwargs):
+        for provider in self.providers:
+            if provider.name == provider_name:
+                for key, value in kwargs.items():
+                    if hasattr(provider, key):
+                        setattr(provider, key, value)
+                    else:
+                        raise ValueError(f"Invalid attribute {key} for Provider.")
+                self.save_to_file()
+                return provider
+        raise ValueError(f"Provider {provider_name} not found.")

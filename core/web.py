@@ -1,165 +1,309 @@
-
-
-from datetime import timedelta
+import asyncio
+import dataclasses
 import json
 import time
 import uuid
-from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
-from flask_limiter import Limiter
+from datetime import timedelta
+from collections import defaultdict
+
+from quart import Quart, websocket, session, render_template, request, redirect, url_for, abort, jsonify, flash
+
 import redis
-import waitress
-from server import SystemReceiver
-from util import Config, SYSTEM_IMAGES
-import os
 
+from models import Provider, Site, System, SystemCPU, SystemDisk, SystemMemory, SystemNetwork, SystemOS
+from db import SystemDB
+from util import Config
 
-def get_remote_address():
-    """Get the remote address from the request, falling back to X-Real-IP."""
-    if request.remote_addr not in ("127.0.0.1", "::1"):
-        return request.remote_addr
-    return request.headers.get("X-Real-IP", request.remote_addr)
-
-def get_limiter_login_fail_key():
-    """Get the Redis key for tracking login failures."""
-    return f"login_fail:{get_remote_address()}"
-
-r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-
-LIMITER = Limiter(
-    key_func=get_remote_address,
-    storage_uri="redis://localhost:6379/0",
-)
-
-def login_backoff_limit():
-    if LOCAL_DEBUG:
-        return "100 per minute"
-    
-    fails = int(r.get(get_limiter_login_fail_key()) or 0)
-
-    # tiered policy:
-    #   0 fails → 5/min
-    #   1 fail  → 3/min
-    #   2+ fails → 1 per (2**(fails-1)) seconds, capped 300s
-    if fails == 0:
-        return "5 per minute"
-    if fails == 1:
-        return "3 per minute"
-
-    window = min(2 ** (fails - 1), 300)  # seconds
-    # Flask-Limiter time units are whole nouns; use "second" if window==1 else "seconds"
-    unit = "second" if window == 1 else "seconds"
-    return f"1 per {window} {unit}"
-
-def frp_backoff_limit():
-    ip = get_remote_address()
-    fails = int(r.get(f"frp_fail:{ip}") or 0)
-    if fails == 0:
-        return "100 per minute"
-    window = min(2 ** fails, 600)
-    return f"20 per minute; 1 per {window} seconds"
-
-LOCAL_DEBUG = False
 
 class Dashboard:
-    def __init__(self, config: Config, receiver: SystemReceiver, local_debug: bool = False):
-        global LOCAL_DEBUG
-
+    def __init__(self, config: Config):
         self.config = config
-        self.receiver = receiver
-        self.local_debug = local_debug
-        LOCAL_DEBUG = local_debug
+        self.db = SystemDB()
+        self.clients = set()
+        self.client_map = {}
+        self.msg_count = defaultdict(int)
 
         self.USERNAME = config.dashboard_username
         self.PASSWORD = config.dashboard_password
 
-        self.app = Flask("SysMon", template_folder='core/templates')
+        self.app = Quart("SysMon", template_folder='core/templates', static_folder='core/static')
+        self.app.secret_key = uuid.uuid4().hex
         self.app.config.update(
             APPLICATION_ROOT=config.dashboard_application_root,
-            SECRET_KEY=uuid.uuid4().hex,
-            WTF_CSRF_TIME_LIMIT=3600,
-            SESSION_COOKIE_SECURE=not self.local_debug,       # only sent over HTTPS
-            # SESSION_COOKIE_HTTPONLY=True,     # JS can’t read
-            # SESSION_COOKIE_SAMESITE="Strict", # no cross-site requests
-            PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
+            PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
         )
-        self.app.jinja_env.globals["local_debug"] = local_debug
+
+        self.redis = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+
+        self._setup_routes()
+
+    def get_limiter_login_fail_key(self):
+        return f"login_fail:{request.remote_addr}"
+
+    def _setup_routes(self):
+        app = self.app
+
+        @app.errorhandler(404)
+        @app.errorhandler(405)
+        async def standard_error(error):
+            return await render_template("status_code.jinja", status_code=error.code), error.code
+
+        @app.route('/')
+        async def index():
+            if not session.get('logged_in'):
+                return redirect(url_for('login'))
+            return await render_template("index.jinja", providers=self.db.providers, application_root=app.config['APPLICATION_ROOT'])
+
+        @app.route('/login', methods=['GET', 'POST'])
+        async def login():
+
+            # key = self.get_limiter_login_fail_key()
+            # fails = int(self.redis.get(key) or 0)
+            # if fails > 5:
+            #     return "Too many attempts. Try again later.", 429
+
+            # # On failure:
+            # self.redis.incr(key)
+            # self.redis.expire(key, 900)
 
 
+            if session.get('logged_in'):
+                return redirect(url_for('index'))
 
-        self.app.errorhandler(404)(self.standard_error)
-        self.app.errorhandler(405)(self.standard_error)
+            if request.method == 'POST':
+                form = await request.form
+                username = form.get('username')
+                password = form.get('password')
+                if username == self.USERNAME and password == self.PASSWORD:
+                    session.clear()
+                    session.permanent = True
+                    session['logged_in'] = True
+                    return redirect(url_for('index'))
+                else:
+                    flash("Invalid username or password", 'error')
 
-        self.app.static_folder = 'core/static'
+            return await render_template("login.jinja")
 
-        self.app.add_url_rule('/', 'index', self.index)
-        self.app.add_url_rule('/login', 'login', self.login, methods=['GET', 'POST'])
-        self.app.add_url_rule('/logout', 'logout', self.logout)
+        @app.route('/logout')
+        async def logout():
+            session.pop('logged_in', None)
+            flash("Logged out", 'success')
+            return redirect(url_for('login'))
 
+        @app.route('/providers.json')
+        async def providers_json():
+            if not session.get('logged_in'):
+                abort(401)
+            return jsonify([dataclasses.asdict(p) for p in self.db.providers])
 
+        @app.route('/system/<system_id>')
+        async def system_view(system_id):
+            if not session.get('logged_in'):
+                return redirect(url_for('login'))
+            system = self._find_system_by_id(system_id)
+            if not system:
+                abort(404)
+            return await render_template("system.html", system=system)
 
-    def run(self):
-        print(f"Starting Flask server on {self.config.dashboard_host}:{self.config.dashboard_port}")
-        waitress.serve(self.app, host=self.config.dashboard_host, port=self.config.dashboard_port)
+        @app.route('/system/<system_id>/json')
+        async def system_json(system_id):
+            if not session.get('logged_in'):
+                abort(401)
+            system = self._find_system_by_id(system_id)
+            if not system:
+                abort(404)
+            return jsonify({
+                "id": system.id,
+                "name": system.name,
+                "cpu": dataclasses.asdict(system.cpu),
+                "memory": dataclasses.asdict(system.memory),
+                "last_seen": system.last_seen,
+            })
 
+        @app.route('/admin', methods=['GET', 'POST'])
+        async def admin():
+            if not session.get('logged_in'):
+                return redirect(url_for('login'))
 
-    def standard_error(self, error):
-        return render_template("status_code.jinja", status_code=404), 404
-    
+            if request.method == 'POST':
+                form = await request.form
+                action = form.get("action")
+                try:
+                    if action == "add_provider":
+                        self.db.add_provider(Provider(name=form["name"], sites=[], url=form.get("url", "")))
 
+                    elif action == "edit_provider":
+                        self.db.edit_provider(form["name"], name=form["new_name"], url=form.get("url", ""))
 
-    @LIMITER.limit(login_backoff_limit)
-    def login(self):
-        if session.get('logged_in'):
-            return redirect(self.app.config['APPLICATION_ROOT'] + url_for('index'))
+                    elif action == "remove_provider":
+                        self.db.remove_provider(form["name"])
 
-        if request.method == 'POST':
-            username = request.form['username']
-            password = request.form['password']
-            if username == self.USERNAME and password == self.PASSWORD:
-                if not self.local_debug:
-                    r.delete(get_limiter_login_fail_key())
-                session.clear()
-                session.permanent = True
-                session['logged_in'] = True
-                return redirect(self.app.config['APPLICATION_ROOT'] + url_for('index'))
-            else:
-                if not self.local_debug:
-                    pipe = r.pipeline()
-                    key = get_limiter_login_fail_key()
-                    pipe.incr(key)
-                    pipe.expire(key, 900)  # reset after 15 minutes quiet
-                    pipe.execute()
+                    elif action == "add_site":
+                        self.db.add_site(
+                            form["provider_name"],
+                            Site(name=form["site_name"], type=form["type"], geoname=form.get("geoname", ""), systems=[])
+                        )
 
-                flash('Invalid username or password', 'error')
+                    elif action == "edit_site":
+                        self.db.edit_site(
+                            form["provider_name"],
+                            form["site_name"],
+                            name=form.get("new_name", form["site_name"]),
+                            type=form.get("type"),
+                            geoname=form.get("geoname", "")
+                        )
 
-        return render_template("login.jinja")
+                    elif action == "remove_site":
+                        self.db.remove_site(form["provider_name"], form["site_name"])
 
-    def logout(self):
-        session.pop('logged_in', None)
-        flash('Logged out successfully', 'success')
-        return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
+                    elif action == "add_system":
+                        self.db.add_system(
+                            form["site_name"],
+                            System(
+                                id=form["id"],
+                                name=form["name"],
+                                type=form["type"],
+                                group=form.get("group", ""),
+                                connected=False,
+                                warning=False,
+                                critical=False,
+                            )
+                        )
 
-    def _find_system(self, system_id: str):
-        """
-        Walk the DB and return (system, site, provider) or (None, None, None)
-        if the ID is unknown.
-        """
-        for prov in self.receiver.db.providers:
+                    elif action == "edit_system":
+                        self.db.edit_system(
+                            form["system_id"],
+                            name=form.get("name"),
+                            type=form.get("type"),
+                            group=form.get("group", ""),
+                            connected="connected" in form,
+                            warning="warning" in form,
+                            critical="critical" in form,
+                        )
+
+                    elif action == "remove_system":
+                        self.db.remove_system(form["system_id"])
+
+                except Exception as e:
+                    print(f"Error processing action {action}: {e}")
+
+                return redirect(url_for("admin"))
+
+            return await render_template("admin.jinja", providers=self.db.providers)
+
+        @app.websocket('/ws')
+        async def ws():
+            ws = websocket._get_current_object()
+            self.clients.add(ws)
+            self.client_map[ws] = None
+            print(f"✓ WebSocket connected (clients={len(self.clients)})")
+            try:
+                while True:
+                    msg = await websocket.receive()
+                    self.msg_count[ws] += 1
+                    await self._handle_ws_message(msg, ws)
+            except Exception as e:
+                print(f"WebSocket error: {e}")
+            finally:
+                self.clients.discard(ws)
+                sid = self.client_map.pop(ws, None)
+                if sid:
+                    self.db.update_system(sid, connected=False)
+                print(f"✗ WebSocket disconnected (clients={len(self.clients)})")
+
+    def _find_system_by_id(self, system_id):
+        for prov in self.db.providers:
             for site in prov.sites:
                 for sys in site.systems:
                     if sys.id == system_id:
-                        return sys, site, prov
-        return None, None, None
-    
-    def index(self):
-        if not session.get('logged_in'):
-            return redirect(self.app.config['APPLICATION_ROOT'] + url_for('login'))
+                        return sys
+        return None
 
-        return render_template("index.jinja", 
-                            #    proxy_map=self.nginx_manager.proxy_map, 
-                            #    gateway_server_list=self.frp_manager.get_server_list(), 
-                            #    gateway_client_list=self.frp_manager.get_client_list(), 
-                            #    gateway_connection_list=self.frp_manager.get_connection_list(), 
-                            #    domain=self.nginx_manager.domain, 
-                                providers=self.receiver.db.providers,
-                                application_root=self.app.config['APPLICATION_ROOT'])
+    async def _handle_ws_message(self, msg, ws):
+        print(f"Received message from {ws.remote_addr}: {len(msg)}")
+        json_data = json.loads(msg)
+
+        system_id = json_data.get("system_id")
+        timestamp = json_data.get("timestamp")
+        type = json_data.get("type")
+
+        system = self.db.get_system(system_id)
+        if not system:
+            raise ValueError(f"Unknown system ID: {system_id}")
+
+        self.client_map[ws] = system_id
+        self.db.update_system(system_id, connected=True)
+
+        if type == "hardware_info":
+            data = json_data["hardware"]
+            
+            network = SystemNetwork(
+                hostname=data["network"]["hostname"],
+                fqdn=data["network"]["fqdn"],
+                public_ip=data["network"]["public_ip"],
+                interfaces=data["network"]["interfaces"],
+            )
+            os_info = SystemOS(
+                system=data["os"]["system"],
+                release=data["os"]["release"],
+                version=data["os"]["version"],
+                machine=data["os"]["machine"],
+                processor=data["os"]["processor"],
+            )
+            cpu = SystemCPU(
+                physical_cores=data["cpu"]["physical_cores"],
+                logical_cores=data["cpu"]["logical_cores"],
+                max_frequency_mhz=data["cpu"]["max_frequency_mhz"],
+            )
+            memory = SystemMemory(
+                total_gib=data["mem_total_gib"],
+            )
+            disks = [
+                SystemDisk(
+                    device=disk["device"],
+                    mountpoint=disk["mountpoint"],
+                    fstype=disk["fstype"],
+                    total_gib=disk["total_gib"],
+                )
+                for disk in data["disks"]
+            ]
+
+            self.db.update_system(
+                system_id,
+                network=network,
+                os=os_info,
+                cpu=cpu,
+                memory=memory,
+                disks=disks
+            )
+
+        elif type == "usage_info":
+            data = json_data["usage"]
+
+            cpu_pct = data["cpu_pct"]
+            mem_used_gib = data["mem_used_gib"]
+            for disk in data["disks"]:
+                device = disk["device"]
+                used_gib = disk["used_gib"]
+                # Update the disk usage in the system
+                for sys_disk in system.disks:
+                    if sys_disk.device == device:
+                        sys_disk.used_gib = used_gib
+                        break
+
+            network = SystemNetwork(
+                hostname=data["network"]["hostname"],
+                fqdn=data["network"]["fqdn"],
+                public_ip=data["network"]["public_ip"],
+                interfaces=data["network"]["interfaces"],
+            )
+
+            system.cpu.usage_pct = cpu_pct
+            system.memory.used_gib = mem_used_gib
+            system.network = network
+
+        system.last_seen = int(time.time())
+
+    def run(self):
+        print(f"Starting on {self.config.dashboard_host}:{self.config.dashboard_port}")
+        self.app.run(host=self.config.dashboard_host, port=self.config.dashboard_port)

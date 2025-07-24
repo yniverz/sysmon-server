@@ -1,464 +1,313 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <title>SysMon Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.js"></script>
+    <title>System Dashboard</title>
     <style>
-        .grid-cols-auto-fit {
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            display: grid;
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f4f6f8;
+            color: #333;
+            margin: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #222;
+        }
+
+        details {
+            margin-bottom: 12px;
+            border-radius: 6px;
+            background: #ffffff;
+            border: 1px solid #ddd;
+        }
+
+        summary {
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #f9fafb;
+            border-bottom: 1px solid #ddd;
+        }
+
+        summary:hover {
+            background-color: #f1f3f5;
+        }
+
+        .indent {
+            padding: 10px 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #f1f3f5;
+            border-bottom: 2px solid #ccc;
+        }
+
+        tr {
+            background: #ffffff;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:hover {
+            background-color: #f0f4f8;
+            cursor: pointer;
+        }
+
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 6px;
+        }
+
+        .dot-green { background-color: #4caf50; }
+        .dot-orange { background-color: #ff9800; }
+        .dot-red { background-color: #f44336; }
+        .dot-grey { background-color: #9e9e9e; }
+
+        .usage-bar {
+            width: 100%;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .usage-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .usage-green { background-color: #4caf50; }
+        .usage-orange { background-color: #ff9800; }
+        .usage-red { background-color: #f44336; }
+
+        .status-summary {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
         }
     </style>
 </head>
+<body>
+    <h1>System Dashboard</h1>
 
-<body class="h-screen flex flex-col">
+    <div style="text-align: right; margin-bottom: 20px;">
+        <a href="{{ url_for('admin') }}" class="btn-inline">Admin</a>
+    </div>
 
-    <header class="bg-gray-800 text-white px-6 py-3 flex justify-between items-center">
-        <h1 class="text-xl font-semibold">SysMon Dashboard</h1>
-    </header>
+    {% macro usage_bar(system, kind) %}
+        {% if kind == 'cpu' %}
+            {% set percent = system.cpu.usage_pct %}
+        {% else %}
+            {% set total = system.memory.total_gib or 1 %}
+            {% set percent = (system.memory.used_gib / total) * 100 %}
+        {% endif %}
+        {% if percent <= 70 %}
+            {% set color = "usage-green" %}
+        {% elif percent <= 90 %}
+            {% set color = "usage-orange" %}
+        {% else %}
+            {% set color = "usage-red" %}
+        {% endif %}
+        <div class="usage-bar" id="{{ kind }}-bar-{{ system.id }}">
+            <div class="usage-fill {{ color }}" style="width: {{ percent }}%;" id="{{ kind }}-fill-{{ system.id }}"></div>
+        </div>
+    {% endmacro %}
 
-    <div id="app" class="flex-1 overflow-auto p-6 bg-gray-50"></div>
+    {% macro status_dot(system) %}
+        {% if system.critical %}
+            <span class="status-dot dot-red" id="status-{{ system.id }}"></span>
+        {% elif system.warning %}
+            <span class="status-dot dot-orange" id="status-{{ system.id }}"></span>
+        {% elif system.connected %}
+            <span class="status-dot dot-green" id="status-{{ system.id }}"></span>
+        {% else %}
+            <span class="status-dot dot-grey" id="status-{{ system.id }}"></span>
+        {% endif %}
+    {% endmacro %}
 
-    <!-- Breadcrumb template -->
-    <template id="breadcrumb-template">
-        <nav class="mb-4 text-sm text-gray-600">
-            <router-link to="/">Root</router-link>
-            <template v-if="$route.params.provider">
-                &nbsp;&gt;&nbsp;
-                <router-link :to="{ name: 'provider', params: { provider: $route.params.provider } }">
-                    [[ $route.params.provider ]]
-                </router-link>
-            </template>
-            <template v-if="$route.params.site">
-                &nbsp;&gt;&nbsp;
-                <router-link
-                    :to="{ name: 'site', params: { provider: $route.params.provider, site: $route.params.site } }">
-                    [[ $route.params.site ]]
-                </router-link>
-            </template>
-            <template v-if="$route.params.group">
-                &nbsp;&gt;&nbsp;
-                <router-link
-                    :to="{ name: 'group', params: { provider: $route.params.provider, site: $route.params.site, group: $route.params.group } }">
-                    [[ $route.params.group === '-' ? '– ungrouped –' : $route.params.group ]]
-                </router-link>
-            </template>
-        </nav>
-    </template>
+    {% macro status_summary(systems, id_prefix="") %}
+        <span class="status-summary" id="{{ id_prefix }}">
+            {% for s in systems %}
+                {% if s.critical %}
+                    <span class="status-dot dot-red"></span>
+                {% elif s.warning %}
+                    <span class="status-dot dot-orange"></span>
+                {% elif s.connected %}
+                    <span class="status-dot dot-green"></span>
+                {% else %}
+                    <span class="status-dot dot-grey"></span>
+                {% endif %}
+            {% endfor %}
+        </span>
+    {% endmacro %}
 
-    <script type="module">
-        import { loadIcon } from '/static/js/icon-loader.js';
+    {% for provider in providers %}
+    <details>
+        <summary>
+            🌐 Provider: {{ provider.name }}
+            {{ status_summary(provider.sites | map(attribute='systems') | sum(start=[]), 'summary-provider-' ~ provider.name) }}
+        </summary>
+        <div class="indent">
+            {% for site in provider.sites %}
+            <details>
+                <summary>
+                    🏢 Site: {{ site.name }} ({{ site.type }}) — {{ site.geoname }}
+                    {{ status_summary(site.systems, 'summary-site-' ~ site.name) }}
+                </summary>
+                <div class="indent">
+                    {% set grouped_systems = {} %}
+                    {% for sys in site.systems %}
+                        {% set _ = grouped_systems.setdefault(sys.group, []).append(sys) %}
+                    {% endfor %}
 
-        const { createApp, ref, computed, onMounted, watch } = Vue;
-        const { createRouter, createWebHashHistory, useRoute, RouterLink } = VueRouter;
+                    {% for group, systems in grouped_systems.items() %}
+                    {% set group_id = 'summary-group-' ~ site.name ~ '-' ~ (group or 'ungrouped') %}
+                    <details>
+                        <summary>
+                            🗂️ Group: {{ group or "Ungrouped" }}
+                            {{ status_summary(systems, group_id) }}
+                        </summary>
+                        <div class="indent">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Type</th>
+                                        <th>CPU Load</th>
+                                        <th>Memory Used</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for system in systems %}
+                                    <tr onclick="window.open('/system/{{ system.id }}', '_blank')">
+                                        <td>{{ system.name }}</td>
+                                        <td>{{ system.type }}</td>
+                                        <td>{{ usage_bar(system, 'cpu') }}</td>
+                                        <td>{{ usage_bar(system, 'mem') }}</td>
+                                        <td>{{ status_dot(system) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endfor %}
+        </div>
+    </details>
+    {% endfor %}
 
-        const providers = {{ providers | tojson | safe }};
-        const allSites = providers.flatMap(p => p.sites);
-        const allSys = allSites.flatMap(s => s.systems);
-
-        const META = {
-            server: { max: 4, dx: 0, dy: -55 },
-            desktop: { max: 2, dx: 93, dy: 45 },
-            mini_desktop: { max: 5, dx: 32, dy: 15 },
-            laptop: { max: 1, dx: 0, dy: 0 },
-            mobile: { max: 1, dx: 0, dy: 0 },
-        };
-
-        const OFFLINE_SEC = 600;
-        const nowSec = () => Math.floor(Date.now() / 1000);
-        const isOnline = s => (nowSec() - s.last_seen) < OFFLINE_SEC;
-
-        const ICON_CACHE = new Map();
-
-        //        async function composeIcon(type, stack) {
-        //            const { max, dx, dy } = META[type] || META.laptop;
-        //            const actualStack = stack.slice(0, max);
-        //
-        //            const cacheKey = `${type}|${actualStack.map(s => isOnline(s) ? 'on' : 'off').join('+')}`;
-        //            if (ICON_CACHE.has(cacheKey)) return ICON_CACHE.get(cacheKey);
-        //
-        //            const TILE_PX = 1000;                // use higher resolution icons
-        //            const ICON_OFFSET = 1000;          // big buffer so stacking won't clip
-        //            const INTERMEDIATE_SIZE = 2000;
-        //
-        //            const parts = await Promise.all(
-        //                actualStack.map(async (s, i) => ({
-        //                    ox: i * dx,
-        //                    oy: i * dy,
-        //                    img: await loadIcon(type, isOnline(s) ? 'on' : 'off')
-        //                }))
-        //            );
-        //
-        //            // 1. Draw full-resolution stack on large canvas
-        //            const interCanvas = new OffscreenCanvas(INTERMEDIATE_SIZE, INTERMEDIATE_SIZE);
-        //            const interCtx = interCanvas.getContext('2d');
-        //
-        //            for (const p of parts) {
-        //                const x = ICON_OFFSET + p.ox * 2;  // scaled offsets for higher res
-        //                const y = ICON_OFFSET + p.oy * 2;
-        //                interCtx.drawImage(p.img, x, y, TILE_PX, TILE_PX);
-        //            }
-        //
-        //            // 2. Analyze pixel data to get tight bounding box
-        //            const imageData = interCtx.getImageData(0, 0, INTERMEDIATE_SIZE, INTERMEDIATE_SIZE);
-        //            const { data, width, height } = imageData;
-        //
-        //            let minX = width, minY = height, maxX = 0, maxY = 0;
-        //            for (let y = 0; y < height; y++) {
-        //                for (let x = 0; x < width; x++) {
-        //                    const idx = (y * width + x) * 4;
-        //                    if (data[idx + 3] > 0) {
-        //                        if (x < minX) minX = x;
-        //                        if (x > maxX) maxX = x;
-        //                        if (y < minY) minY = y;
-        //                        if (y > maxY) maxY = y;
-        //                    }
-        //                }
-        //            }
-        //
-        //            const contentW = maxX - minX;
-        //            const contentH = maxY - minY;
-        //
-        //            // 3. Final output canvas: 1000x1000
-        //            const OUT_SIZE = 1000;
-        //            const MARGIN = OUT_SIZE * 0.10;
-        //            const drawW = OUT_SIZE - MARGIN * 2;
-        //            const drawH = OUT_SIZE - MARGIN * 2;
-        //            const scale = Math.min(drawW / contentW, drawH / contentH);
-        //
-        //            const finalCanvas = new OffscreenCanvas(OUT_SIZE, OUT_SIZE);
-        //            const finalCtx = finalCanvas.getContext('2d');
-        //
-        //            const scaledW = contentW * scale;
-        //            const scaledH = contentH * scale;
-        //            const offsetX = (OUT_SIZE - scaledW) / 2;
-        //            const offsetY = (OUT_SIZE - scaledH) / 2;
-        //
-        //            // 4. Draw from tight region, scaled, centered
-        //            finalCtx.drawImage(
-        //                interCanvas,
-        //                minX, minY, contentW, contentH,
-        //                offsetX, offsetY, scaledW, scaledH
-        //            );
-        //
-        //            const blob = await finalCanvas.convertToBlob();
-        //            const url = URL.createObjectURL(blob);
-        //            ICON_CACHE.set(cacheKey, url);
-        //            return url;
-        //        }
-
-
-        async function composeIcon(type, stack) {
-            const { max, dx, dy } = META[type] || META.laptop;
-            const actualStack = stack.slice(0, max);
-
-            const cacheKey = `${type}|${actualStack.map(s => isOnline(s) ? 'on' : 'off').join('+')}`;
-            if (ICON_CACHE.has(cacheKey)) return ICON_CACHE.get(cacheKey);
-
-            const TILE_PX = 1000;
-            const ICON_OFFSET = 1000;
-            const INTERMEDIATE_SIZE = 2000;
-            const OUT_SIZE = 1000;
-            const STATIC_SCALE = 1; // 🔧 fixed zoom
-
-            // 1. Draw at full res on large intermediate canvas
-            const interCanvas = new OffscreenCanvas(INTERMEDIATE_SIZE, INTERMEDIATE_SIZE);
-            const interCtx = interCanvas.getContext('2d');
-
-            for (const p of await Promise.all(
-                actualStack.map(async (s, i) => ({
-                    ox: i * dx,
-                    oy: i * dy,
-                    img: await loadIcon(type, isOnline(s) ? 'on' : 'off')
-                }))
-            )) {
-                const x = ICON_OFFSET + p.ox * 2;
-                const y = ICON_OFFSET + p.oy * 2;
-                interCtx.drawImage(p.img, x, y, TILE_PX, TILE_PX);
-            }
-
-            // 2. Analyze image data to find actual visible content bounds
-            const imageData = interCtx.getImageData(0, 0, INTERMEDIATE_SIZE, INTERMEDIATE_SIZE);
-            const { data, width, height } = imageData;
-
-            let minX = width, minY = height, maxX = 0, maxY = 0;
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const idx = (y * width + x) * 4;
-                    if (data[idx + 3] > 0) {
-                        if (x < minX) minX = x;
-                        if (x > maxX) maxX = x;
-                        if (y < minY) minY = y;
-                        if (y > maxY) maxY = y;
-                    }
-                }
-            }
-
-            const contentW = maxX - minX;
-            const contentH = maxY - minY;
-
-            // 3. Apply fixed scaling, but center visible content in output canvas
-            const scaledW = INTERMEDIATE_SIZE * STATIC_SCALE;
-            const scaledH = INTERMEDIATE_SIZE * STATIC_SCALE;
-
-            const offsetX = (OUT_SIZE / 2) - ((minX + contentW / 2) * STATIC_SCALE);
-            const offsetY = (OUT_SIZE / 2) - ((minY + contentH / 2) * STATIC_SCALE);
-
-            const finalCanvas = new OffscreenCanvas(OUT_SIZE, OUT_SIZE);
-            const finalCtx = finalCanvas.getContext('2d');
-
-            finalCtx.drawImage(
-                interCanvas,
-                0, 0, INTERMEDIATE_SIZE, INTERMEDIATE_SIZE,
-                offsetX, offsetY, scaledW, scaledH
-            );
-
-            const blob = await finalCanvas.convertToBlob();
-            const url = URL.createObjectURL(blob);
-            ICON_CACHE.set(cacheKey, url);
-            return url;
+    <script>
+        function getDotClass(system) {
+            if (system.critical) return 'dot-red';
+            if (system.warning) return 'dot-orange';
+            if (system.connected) return 'dot-green';
+            return 'dot-grey';
         }
 
-
-
-
-        function groupAndStack(systems) {
-            const byType = systems.reduce((acc, sys) => {
-                (acc[sys.type] ||= []).push(sys);
-                return acc;
-            }, {});
-            const result = [];
-            for (const [type, systems] of Object.entries(byType)) {
-                const { max } = META[type] || META.laptop;
-                for (let i = 0; i < systems.length; i += max) {
-                    result.push({ type, stack: systems.slice(i, i + max) });
-                }
-            }
-            return result;
+        function getUsageColor(percent) {
+            if (percent <= 70) return 'usage-green';
+            if (percent <= 90) return 'usage-orange';
+            return 'usage-red';
         }
 
-        const useProvider = name => computed(() => providers.find(p => p.name === name));
-        const useSite = name => computed(() => allSites.find(s => s.name === name));
-        const useGroup = (site, g) => computed(() => site.value.systems.filter(s => (s.group || '') === g));
-        const useSys = id => computed(() => allSys.find(s => s.id === id));
+        function updateSystem(system) {
+            const cpuFill = document.getElementById(`cpu-fill-${system.id}`);
+            const memFill = document.getElementById(`mem-fill-${system.id}`);
+            const status = document.getElementById(`status-${system.id}`);
 
-        const BreadcrumbBar = {
-            template: document.getElementById('breadcrumb-template').innerHTML,
-            components: { RouterLink }
-        };
+            if (cpuFill) {
+                const cpuPct = system.cpu.usage_pct;
+                cpuFill.style.width = `${cpuPct}%`;
+                cpuFill.className = `usage-fill ${getUsageColor(cpuPct)}`;
+            }
 
-        const Providers = {
-            template: `
-      <div>
-        <breadcrumb-bar></breadcrumb-bar>
-        <div class="grid gap-4 grid-cols-auto-fit">
-          <div v-for="p in providers" :key="p.name">
-            <router-link :to="{ name:'provider', params:{ provider: p.name }}">
-              <div class="p-4 bg-white rounded shadow text-center hover:bg-gray-100">
-                <h2 class="font-semibold mb-2">[[ p.name ]]</h2>
-                <div class="flex justify-center flex-wrap gap-2">
-                  <img v-for="icon in providerIcons[p.name]" :src="icon" class="w-24 h-24" />
-                </div>
-                <p class="text-sm mt-1">[[ p.sites.length ]] sites</p>
-              </div>
-            </router-link>
-          </div>
-        </div>
-      </div>
-    `,
-            setup() {
-                const providerIcons = ref({});
+            if (memFill) {
+                const total = system.memory.total_gib || 1;
+                const memPct = (system.memory.used_gib / total) * 100;
+                memFill.style.width = `${memPct}%`;
+                memFill.className = `usage-fill ${getUsageColor(memPct)}`;
+            }
 
-                onMounted(async () => {
-                    for (const p of providers) {
-                        const systems = p.sites.flatMap(s => s.systems);
-                        const icons = [];
-                        for (const { type, stack } of groupAndStack(systems)) {
-                            const icon = await composeIcon(type, stack);
-                            icons.push(icon);
+            if (status) {
+                status.className = `status-dot ${getDotClass(system)}`;
+            }
+        }
+
+        function updateSummary(id, systems) {
+            const el = document.getElementById(id);
+            if (!el) return;
+
+            el.innerHTML = ''; // clear existing
+
+            for (const s of systems) {
+                const span = document.createElement('span');
+                span.className = 'status-dot ' + getDotClass(s);
+                el.appendChild(span);
+            }
+        }
+
+        async function refreshDashboard() {
+            try {
+                const res = await fetch('/providers.json');
+                const data = await res.json();
+
+                for (const provider of data) {
+                    let providerSystems = [];
+
+                    for (const site of provider.sites) {
+                        let siteSystems = [];
+                        const groupMap = {};
+
+                        for (const system of site.systems) {
+                            updateSystem(system);
+
+                            siteSystems.push(system);
+                            providerSystems.push(system);
+
+                            const groupKey = system.group || 'ungrouped';
+                            groupMap[groupKey] = groupMap[groupKey] || [];
+                            groupMap[groupKey].push(system);
                         }
-                        providerIcons.value[p.name] = icons;
-                    }
-                });
 
-                return { providers, providerIcons };
-            }
-        };
+                        updateSummary(`summary-site-${site.name}`, siteSystems);
 
-        const ProviderView = {
-            template: `
-      <div>
-        <breadcrumb-bar></breadcrumb-bar>
-        <h2 class="text-xl font-semibold mb-4">[[ provider.name ]]</h2>
-        <div class="grid gap-4 grid-cols-auto-fit">
-          <div v-for="site in provider.sites" :key="site.name">
-            <router-link :to="{ name:'site', params:{ provider: provider.name, site: site.name }}">
-              <div class="p-4 bg-white rounded shadow hover:bg-gray-100">
-                <h3 class="font-medium mb-2">[[ site.name ]]</h3>
-                <div class="flex justify-center flex-wrap gap-2">
-                  <img v-for="icon in siteIcons[site.name]" :src="icon" class="w-24 h-24" />
-                </div>
-              </div>
-            </router-link>
-          </div>
-        </div>
-      </div>
-    `,
-            setup() {
-                const route = useRoute();
-                const provider = useProvider(route.params.provider);
-                const siteIcons = ref({});
-
-                onMounted(async () => {
-                    for (const site of provider.value.sites) {
-                        const icons = [];
-                        for (const { type, stack } of groupAndStack(site.systems)) {
-                            const icon = await composeIcon(type, stack);
-                            icons.push(icon);
+                        for (const group in groupMap) {
+                            updateSummary(`summary-group-${site.name}-${group}`, groupMap[group]);
                         }
-                        siteIcons.value[site.name] = icons;
                     }
-                });
 
-                return { provider, siteIcons };
+                    updateSummary(`summary-provider-${provider.name}`, providerSystems);
+                }
+            } catch (err) {
+                console.error('Dashboard update error:', err);
             }
-        };
+        }
 
-        const SiteView = {
-            template: `
-      <div>
-        <breadcrumb-bar></breadcrumb-bar>
-        <h2 class="text-xl font-semibold mb-4">[[ site.name ]]</h2>
-        <div class="grid gap-4 grid-cols-auto-fit">
-          <div v-for="grp in groups" :key="grp">
-            <router-link :to="{ name:'group', params:{ provider: $route.params.provider, site:site.name, group: grp || '-' } }">
-              <div class="p-4 bg-white rounded shadow hover:bg-gray-100">
-                <h3 class="font-medium mb-2">[[ grp || '– ungrouped –' ]]</h3>
-                <div class="flex justify-center flex-wrap gap-2">
-                  <img v-for="icon in groupIcons[grp]" :src="icon" class="w-24 h-24" />
-                </div>
-              </div>
-            </router-link>
-          </div>
-        </div>
-        <router-view />
-      </div>
-    `,
-            setup() {
-                const route = useRoute();
-                const site = useSite(route.params.site);
-                const groups = computed(() => [...new Set(site.value.systems.map(s => s.group || ''))]);
-                const groupIcons = ref({});
-
-                onMounted(async () => {
-                    for (const grp of groups.value) {
-                        const systems = site.value.systems.filter(s => (s.group || '') === grp);
-                        const icons = [];
-                        for (const { type, stack } of groupAndStack(systems)) {
-                            const icon = await composeIcon(type, stack);
-                            icons.push(icon);
-                        }
-                        groupIcons.value[grp] = icons;
-                    }
-                });
-
-                return { site, groups, groupIcons };
-            }
-        };
-
-        const GroupView = {
-            template: `
-      <div>
-        <h2 class="text-xl font-semibold mb-4">[[ groupLabel ]]</h2>
-        <div class="grid gap-4 grid-cols-auto-fit">
-          <div v-for="m in machines" :key="m.id" class="cursor-pointer text-center"
-               @click="$router.push({ name:'sys', params:{ provider: $route.params.provider, site: $route.params.site, group: $route.params.group, id: m.id } })">
-            <img :src="sysIcons[m.id]" class="w-24 h-24 rounded mx-auto mb-1"/>
-            <span class="block text-xs truncate">[[ m.name ]]</span>
-          </div>
-        </div>
-        <router-view name="modal" />
-      </div>
-    `,
-            setup() {
-  const route = useRoute();
-  const site = useSite(route.params.site);
-
-  const group = computed(() => route.params.group === '-' ? '' : route.params.group);
-  const groupLabel = computed(() => group.value || '– ungrouped –');
-  const machines = computed(() => site.value.systems.filter(s => (s.group || '') === group.value));
-  const sysIcons = ref({});
-
-  const loadIcons = async () => {
-    const icons = {};
-    for (const m of machines.value) {
-      icons[m.id] = await composeIcon(m.type, [m]);
-    }
-    sysIcons.value = icons;
-  };
-
-  onMounted(loadIcons);
-
-  // 🔁 Watch route param changes and reload icons
-  watch(() => route.params.group, async () => {
-    await loadIcons();
-  });
-
-  return { machines, groupLabel, sysIcons };
-}
-
-        };
-
-        const SysModal = {
-            template: `
-      <teleport to="body">
-        <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" @click.self="$router.back()">
-          <div class="bg-white rounded-lg p-6 shadow-lg relative w-[90vw] max-w-md">
-            <button class="absolute top-2 right-4 text-2xl" @click="$router.back()">&times;</button>
-            <h2 class="text-xl font-semibold mb-2">[[ sys.name ]]</h2>
-            <p class="text-sm text-gray-500 mb-4">[[ sys.network.hostname || 'unknown' ]]</p>
-
-            <p :class="sys.online ? 'text-green-600' : 'text-red-600'">
-              [[ sys.online ? 'online' : 'offline' ]]
-            </p>
-          </div>
-        </div>
-      </teleport>
-    `,
-            setup() {
-                const route = useRoute();
-                const sys = useSys(route.params.id);
-                const online = computed(() => isOnline(sys.value));
-                return { sys: computed(() => ({ ...sys.value, online: online.value })) };
-            }
-        };
-
-        const routes = [
-            { path: '/', component: Providers, name: 'providers' },
-            { path: '/provider/:provider', component: ProviderView, name: 'provider' },
-            {
-                path: '/provider/:provider/site/:site', component: SiteView, name: 'site',
-                children: [
-                    {
-                        path: 'group/:group', component: GroupView, name: 'group',
-                        children: [
-                            { path: 'sys/:id', components: { default: GroupView, modal: SysModal }, name: 'sys' }
-                        ]
-                    }
-                ]
-            }
-        ];
-
-        const app = createApp({ template: `<router-view />` });
-        app.config.compilerOptions.delimiters = ['[[', ']]'];
-        app.component('breadcrumb-bar', BreadcrumbBar);
-        app.use(createRouter({ history: createWebHashHistory(), routes }));
-        app.mount('#app');
+        setInterval(refreshDashboard, 5000);
+        window.onload = refreshDashboard;
     </script>
 </body>
-
 </html>

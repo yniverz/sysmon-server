@@ -9,6 +9,7 @@ from typing import Any, Final, Sequence, Type
 from dataclasses import dataclass
 
 from flask import Response
+import toml
 from models import model_registry
 
 
@@ -20,8 +21,24 @@ class Config:
     dashboard_application_root: str = ""
     dashboard_username: str = "admin"
     dashboard_password: str = "admin"
-    websocket_host: str = "0.0.0.0"
-    websocket_port: int = 8765
+
+    def from_toml(path: str = 'config.toml') -> 'Config':
+        cfg = Config()
+        try:
+            with open(path, 'r') as f:
+                config_data = toml.load(f)
+                cfg.dashboard_host = config_data.get('dashboard', {}).get('host', cfg.dashboard_host)
+                cfg.dashboard_port = config_data.get('dashboard', {}).get('port', cfg.dashboard_port)
+                cfg.dashboard_username = config_data.get('dashboard', {}).get('username', cfg.dashboard_username)
+                cfg.dashboard_password = config_data.get('dashboard', {}).get('password', cfg.dashboard_password)
+                cfg.dashboard_application_root = config_data.get('dashboard', {}).get('application_root', cfg.dashboard_application_root)
+                return cfg
+
+        except FileNotFoundError:
+            print("config.toml not found, using default values.")
+            
+        return cfg
+
 
 
 
@@ -30,7 +47,6 @@ class DataclassJSONEncoder(json.JSONEncoder):
     Recursively adds a __type__ key to all dataclass instances
     """
     def default(self, obj: Any) -> Any:
-        print(f"Encoding object of type {type(obj)}")
         if dataclasses.is_dataclass(obj):
             return self._encode_dataclass(obj)
         return super().default(obj)

@@ -52,6 +52,8 @@ class Event:
     level: EventLevel
     type: EventType
     timestamp: str
+    clearable: bool = False
+    cleared: bool = False
     description: str = ""
 
 class SystemType:
@@ -74,6 +76,9 @@ class System:
     disks: list[SystemDisk] = dataclasses.field(default_factory=list)
     events: list[Event] = dataclasses.field(default_factory=list)
     last_seen: int = 0
+    connected: bool = False
+    warning: bool = False
+    critical: bool = False
     group: str = ""
 
 class SiteType:
