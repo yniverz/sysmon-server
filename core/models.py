@@ -91,10 +91,10 @@ class System:
     type: SystemType
     auth_key: str = dataclasses.field(default_factory=lambda: uuid.uuid4().hex)
 
-    os: SystemOS = SystemOS("", "", "", "", "")
-    cpu: SystemCPU = SystemCPU(0, 0, 0)
-    memory: SystemMemory = SystemMemory(0)
-    network: SystemNetwork = SystemNetwork("", "", "", {})
+    os: SystemOS = dataclasses.field(default_factory=lambda: SystemOS("", "", "", "", ""))
+    cpu: SystemCPU = dataclasses.field(default_factory=lambda: SystemCPU(0, 0, 0))
+    memory: SystemMemory = dataclasses.field(default_factory=lambda: SystemMemory(0))
+    network: SystemNetwork = dataclasses.field(default_factory=lambda: SystemNetwork("", "", "", {}))
     disks: list[SystemDisk] = dataclasses.field(default_factory=list)
     services: list[SystemService] = dataclasses.field(default_factory=list)
     events: list[Event] = dataclasses.field(default_factory=list)
