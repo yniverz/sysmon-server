@@ -27,7 +27,7 @@ class Dashboard:
         self.PASSWORD = config.dashboard_password
 
         self.app = Quart("SysMon", template_folder='core/templates', static_folder='core/static')
-        self.app.secret_key = "123"#uuid.uuid4().hex
+        self.app.secret_key = uuid.uuid4().hex
         self.app.config.update(
             APPLICATION_ROOT=config.dashboard_application_root,
             PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
