@@ -199,7 +199,7 @@
                                 </thead>
                                 <tbody>
                                     {% for system in systems %}
-                                    <tr onclick="window.open('/system/{{ system.id }}', '_blank')">
+                                    <tr onclick="window.open('/system?id={{ system.id }}', '_blank')">
                                         <td>{{ system.name }}</td>
                                         <td>{{ system.type }}</td>
                                         <td>{{ usage_bar(system, 'cpu') }}</td>

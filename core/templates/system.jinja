@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{{ system.name }} - System Detail</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --green: #4caf50;
+            --orange: #ff9800;
+            --red: #f44336;
+            --grey: #9e9e9e;
+            --blue: #007bff;
+            --light-bg: #f4f6f8;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--light-bg);
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .row {
+            margin-bottom: 12px;
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .label {
+            font-weight: bold;
+            width: 140px;
+            min-width: 140px;
+        }
+
+        .value {
+            flex: 1;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .dot-green {
+            background-color: var(--green);
+        }
+
+        .dot-orange {
+            background-color: var(--orange);
+        }
+
+        .dot-red {
+            background-color: var(--red);
+        }
+
+        .dot-grey {
+            background-color: var(--grey);
+        }
+
+        .usage-bar {
+            width: 100%;
+            height: 12px;
+            background: #e0e0e0;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .usage-fill {
+            height: 100%;
+        }
+
+        .usage-green {
+            background-color: var(--green);
+        }
+
+        .usage-orange {
+            background-color: var(--orange);
+        }
+
+        .usage-red {
+            background-color: var(--red);
+        }
+
+        h3 {
+            margin-top: 25px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        .install-box {
+            margin-top: 30px;
+            background: #f1f3f5;
+            padding: 20px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        .install-command {
+            display: none;
+            margin-top: 15px;
+            font-family: monospace;
+            background: #fff;
+            padding: 10px;
+            border: 1px dashed #bbb;
+            border-radius: 5px;
+            word-break: break-all;
+        }
+
+        .event-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 10px;
+            background: #fff;
+        }
+
+        .event-item {
+            margin-bottom: 12px;
+            border-bottom: 1px dashed #ddd;
+            padding-bottom: 8px;
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .event-level-info {
+            color: var(--green);
+        }
+
+        .event-level-warn {
+            color: var(--orange);
+        }
+
+        .event-level-crit {
+            color: var(--red);
+        }
+
+        .event-timestamp {
+            font-size: 0.85em;
+            color: #777;
+        }
+
+        button {
+            background-color: var(--blue);
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        @media (max-width: 600px) {
+            .label {
+                width: 100%;
+                margin-bottom: 5px;
+            }
+
+            .row {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1 id="system-name">System: {{ system.name }}</h1>
+
+    <div class="card" id="system-data">
+        <div class="row">
+            <div class="label">ID:</div>
+            <div class="value" id="sys-id">{{ system.id }}</div>
+        </div>
+        <div class="row">
+            <div class="label">Name:</div>
+            <div class="value" id="sys-name">{{ system.name }}</div>
+        </div>
+        <div class="row">
+            <div class="label">Type:</div>
+            <div class="value" id="sys-type">{{ system.type }}</div>
+        </div>
+        <div class="row">
+            <div class="label">Group:</div>
+            <div class="value" id="sys-group">{{ system.group or '—' }}</div>
+        </div>
+
+        <div class="row">
+            <div class="label">Status:</div>
+            <div class="value" id="sys-status">
+                {% if system.critical %}
+                <span class="status-dot dot-red"></span>Critical
+                {% elif system.warning %}
+                <span class="status-dot dot-orange"></span>Warning
+                {% elif system.connected %}
+                <span class="status-dot dot-green"></span>Connected
+                {% else %}
+                <span class="status-dot dot-grey"></span>Offline
+                {% endif %}
+            </div>
+        </div>
+
+        <h3>CPU</h3>
+        <div class="row">
+            <div class="label">Usage:</div>
+            <div class="value"><span id="cpu-usage-text">{{ system.cpu.usage_pct }}%</span>
+                <div class="usage-bar">
+                    <div class="usage-fill usage-green" id="cpu-bar" style="width: {{ system.cpu.usage_pct }}%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <h3>Memory</h3>
+        {% set total = system.memory.total_gib or 1 %}
+        {% set used = system.memory.used_gib %}
+        {% set mem_pct = (used / total * 100) | round(1) %}
+        <div class="row">
+            <div class="label">Used:</div>
+            <div class="value"><span id="mem-text">{{ used }} GiB / {{ total }} GiB ({{ mem_pct }}%)</span>
+                <div class="usage-bar">
+                    <div class="usage-fill usage-green" id="mem-bar" style="width: {{ mem_pct }}%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <h3>Network Interfaces</h3>
+        <ul>
+            {% for name, ips in system.network.interfaces.items() %}
+            <li><strong>{{ name }}</strong>: {{ ips | join(', ') }}</li>
+            {% endfor %}
+        </ul>
+
+        <h3>Disks</h3>
+        <ul>
+            {% for disk in system.disks %}
+            {% set total = disk.total_gib or 1 %}
+            {% set used = disk.used_gib %}
+            {% set pct = (used / total * 100) | round(1) %}
+            <li>
+                <div>{{ disk.device }} ({{ disk.mountpoint }}) — {{ used }} GiB / {{ total }} GiB ({{ pct }}%)</div>
+                <div class="usage-bar">
+                    <div class="usage-fill usage-green" style="width: {{ pct }}%;"></div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <div class="install-box">
+            <button onclick="revealInstall()">Reveal Install Command</button>
+            <div class="install-command" id="install-cmd"></div>
+        </div>
+
+        <h3>Recent Events</h3>
+        <div class="event-list" id="event-list">
+            {% if system.events %}
+            {% for event in system.events | sort(attribute='timestamp', reverse=True)|slice(0, 50) %}
+            <div class="event-item" data-ts="{{ event.timestamp }}">
+                <div class="event-header">
+                    <span class="event-level-{{ event.level }}">
+                        [{{ event.level|upper }}] {{ event.type }} — {{ event.description }}
+                    </span>
+                    {% if event.clearable and not event.cleared %}
+                    <button onclick="clearEvent('{{ system.id }}', '{{ event.timestamp }}')">Clear</button>
+                    {% endif %}
+                </div>
+                <div class="event-timestamp">{{ event.timestamp | datetimeformat }}</div>
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        let lastEventHash = "";
+        let sysKey = {{ system.auth_key | tojson }};
+
+        function getStatusDot(system) {
+            if (system.critical) return '<span class="status-dot dot-red"></span>Critical';
+            if (system.warning) return '<span class="status-dot dot-orange"></span>Warning';
+            if (system.connected) return '<span class="status-dot dot-green"></span>Connected';
+            return '<span class="status-dot dot-grey"></span>Offline';
+        }
+
+        function getUsageColor(percent) {
+            if (percent <= 70) return "usage-green";
+            if (percent <= 90) return "usage-orange";
+            return "usage-red";
+        }
+
+        function hashEvents(events) {
+            return events.map(e => e.timestamp + e.description + e.cleared).join('|');
+        }
+
+        function updateSystemView(system) {
+            document.getElementById("system-name").textContent = `System: ${system.name}`;
+            document.getElementById("sys-name").textContent = system.name;
+            document.getElementById("sys-id").textContent = system.id;
+            document.getElementById("sys-type").textContent = system.type;
+            document.getElementById("sys-group").textContent = system.group || "—";
+            document.getElementById("sys-status").innerHTML = getStatusDot(system);
+            sysKey = system.auth_key;
+
+            const cpuBar = document.getElementById("cpu-bar");
+            const cpuPct = system.cpu.usage_pct;
+            cpuBar.style.width = cpuPct + "%";
+            cpuBar.className = "usage-fill " + getUsageColor(cpuPct);
+            document.getElementById("cpu-usage-text").textContent = cpuPct + "%";
+
+            const total = system.memory.total_gib || 1;
+            const used = system.memory.used_gib;
+            const pct = (used / total * 100).toFixed(1);
+            const memBar = document.getElementById("mem-bar");
+            memBar.style.width = pct + "%";
+            memBar.className = "usage-fill " + getUsageColor(pct);
+            document.getElementById("mem-text").textContent = `${used} GiB / ${total} GiB (${pct}%)`;
+
+            const newHash = hashEvents(system.events || []);
+            if (newHash !== lastEventHash) {
+                lastEventHash = newHash;
+                const list = document.getElementById("event-list");
+                list.innerHTML = "";
+                (system.events || [])
+                    .sort((a, b) => b.timestamp - a.timestamp)
+                    .slice(0, 50)
+                    .forEach(ev => {
+                        const div = document.createElement("div");
+                        div.className = "event-item";
+                        div.setAttribute("data-ts", ev.timestamp);
+                        div.innerHTML = `
+                    <div class="event-header">
+                        <span class="event-level-${ev.level}">
+                            [${ev.level.toUpperCase()}] ${ev.type} — ${ev.description}
+                        </span>
+                        ${ev.clearable && !ev.cleared ? `<button onclick="clearEvent('${system.id}', '${ev.timestamp}')">Clear</button>` : ""}
+                    </div>
+                    <div class="event-timestamp">${new Date(ev.timestamp * 1000).toLocaleString()}</div>
+                `;
+                        list.appendChild(div);
+                    });
+            }
+        }
+
+        function fetchSystemUpdate() {
+            const params = new URLSearchParams(window.location.search);
+            const id = params.get("id");
+            if (!id) return;
+
+            fetch(`/system/json?id=${encodeURIComponent(id)}`)
+                .then(res => res.json())
+                .then(data => updateSystemView(data))
+                .catch(err => console.error("Update failed", err));
+        }
+
+        setInterval(fetchSystemUpdate, 5000);
+        window.onload = fetchSystemUpdate;
+
+        function revealInstall() {
+            const systemName = document.getElementById("sys-name").textContent;
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws_url = `${protocol}://${location.host}/ws`;
+            const cmd = `sudo apt-get update && wget https://github.com/yniverz/sysmon-agent && cd sysmon-agent && sudo ./install.sh "${systemName}" "${ws_url}" "${sysKey}"`;
+            const el = document.getElementById("install-cmd");
+            el.textContent = cmd;
+            el.style.display = "block";
+            el.onclick = copyInstallCommand;
+
+            const btn = document.querySelector(".install-box button");
+            btn.textContent = "Hide Install Command";
+            btn.onclick = hideInstall;
+        }
+
+        function copyInstallCommand() {
+            const el = document.getElementById("install-cmd");
+            
+            navigator.clipboard.writeText(el.textContent)
+                .then(() => {
+                    el.style.backgroundColor = "#d4edda";
+                    el.style.borderColor = "#c3e6cb";
+                    const successMsg = document.createElement("span");
+                    successMsg.innerHTML = "<br>Command copied to clipboard!";
+                    successMsg.style.marginLeft = "10px";
+                    successMsg.style.color = "#1bc248";
+                    el.appendChild(successMsg);
+                    setTimeout(() => {
+                        el.style.backgroundColor = "";
+                        el.style.borderColor = "";
+                        successMsg.remove();
+                    }, 5000);
+                })
+                .catch(err => {
+                    console.error("Failed to copy command:", err);
+                    el.style.backgroundColor = "#f8d7da";
+                    el.style.borderColor = "#f5c6cb";
+                    const errorMsg = document.createElement("span");
+                    errorMsg.textContent = "Failed to copy command.";
+                    errorMsg.style.marginLeft = "10px";
+                    errorMsg.style.color = "#721c24";
+                    el.appendChild(errorMsg);
+                    setTimeout(() => {
+                        el.style.backgroundColor = "";
+                        el.style.borderColor = "";
+                        errorMsg.remove();
+                    }, 5000);
+                });
+        }
+
+        function hideInstall() {
+            const el = document.getElementById("install-cmd");
+            el.style.display = "none";
+
+            const btn = document.querySelector(".install-box button");
+            btn.textContent = "Reveal Install Command";
+            btn.onclick = revealInstall;
+        }
+
+        function clearEvent(systemId, ts) {
+            fetch(`/event/clear?system_id=${encodeURIComponent(systemId)}&ts=${encodeURIComponent(ts)}`)
+                .then(() => fetchSystemUpdate())
+                .catch(err => alert("Failed to clear event: " + err));
+        }
+    </script>
+
+</body>
+
+</html>

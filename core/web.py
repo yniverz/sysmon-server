@@ -1,5 +1,5 @@
-import asyncio
 import dataclasses
+import datetime
 import json
 import time
 import uuid
@@ -27,7 +27,7 @@ class Dashboard:
         self.PASSWORD = config.dashboard_password
 
         self.app = Quart("SysMon", template_folder='core/templates', static_folder='core/static')
-        self.app.secret_key = uuid.uuid4().hex
+        self.app.secret_key = "123"#uuid.uuid4().hex
         self.app.config.update(
             APPLICATION_ROOT=config.dashboard_application_root,
             PERMANENT_SESSION_LIFETIME=timedelta(minutes=30)
@@ -47,6 +47,11 @@ class Dashboard:
         @app.errorhandler(405)
         async def standard_error(error):
             return await render_template("status_code.jinja", status_code=error.code), error.code
+
+        @app.template_filter("datetimeformat")
+        def datetimeformat(value):
+            return datetime.datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S')
+
 
         @app.route('/')
         async def index():
@@ -96,29 +101,39 @@ class Dashboard:
                 abort(401)
             return jsonify([dataclasses.asdict(p) for p in self.db.providers])
 
-        @app.route('/system/<system_id>')
-        async def system_view(system_id):
+        @app.route('/system')
+        async def system_view():
             if not session.get('logged_in'):
                 return redirect(url_for('login'))
+            
+            system_id = request.args.get('id')
+            if not system_id:
+                return redirect(url_for('index'))
+
             system = self._find_system_by_id(system_id)
             if not system:
                 abort(404)
-            return await render_template("system.html", system=system)
+            return await render_template("system.jinja", system=system)
 
-        @app.route('/system/<system_id>/json')
-        async def system_json(system_id):
+        @app.route('/system/json')
+        async def system_json():
             if not session.get('logged_in'):
                 abort(401)
+            system_id = request.args.get('id')
+            if not system_id:
+                abort(400, "Missing system ID")
+                
             system = self._find_system_by_id(system_id)
             if not system:
                 abort(404)
-            return jsonify({
-                "id": system.id,
-                "name": system.name,
-                "cpu": dataclasses.asdict(system.cpu),
-                "memory": dataclasses.asdict(system.memory),
-                "last_seen": system.last_seen,
-            })
+            # return jsonify({
+            #     "id": system.id,
+            #     "name": system.name,
+            #     "cpu": dataclasses.asdict(system.cpu),
+            #     "memory": dataclasses.asdict(system.memory),
+            #     "last_seen": system.last_seen,
+            # })
+            return jsonify(dataclasses.asdict(system))
 
         @app.route('/admin', methods=['GET', 'POST'])
         async def admin():
@@ -163,6 +178,7 @@ class Dashboard:
                                 id=form["id"],
                                 name=form["name"],
                                 type=form["type"],
+                                auth_key=uuid.uuid4().hex,
                                 group=form.get("group", ""),
                                 connected=False,
                                 warning=False,

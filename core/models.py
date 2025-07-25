@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import dataclasses
+import uuid
 
 
 @dataclass
@@ -51,7 +52,7 @@ class EventType:
 class Event:
     level: EventLevel
     type: EventType
-    timestamp: str
+    timestamp: float
     clearable: bool = False
     cleared: bool = False
     description: str = ""
@@ -68,6 +69,7 @@ class System:
     id: str
     name: str
     type: SystemType
+    auth_key: str = uuid.uuid4().hex
 
     os: SystemOS = SystemOS("", "", "", "", "")
     cpu: SystemCPU = SystemCPU(0, 0, 0)
