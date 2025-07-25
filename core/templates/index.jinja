@@ -132,30 +132,26 @@
         </div>
     {% endmacro %}
 
-    {% macro status_dot(system) %}
+    {% macro status_dot(system, text=false) %}
         {% if system.critical %}
             <span class="status-dot dot-red" id="status-{{ system.id }}"></span>
+            {% if text %} <span id="status-text-{{ system.id }}">Critical</span> {% endif %}
         {% elif system.warning %}
             <span class="status-dot dot-orange" id="status-{{ system.id }}"></span>
+            {% if text %} <span id="status-text-{{ system.id }}">Warning</span> {% endif %}
         {% elif system.connected %}
             <span class="status-dot dot-green" id="status-{{ system.id }}"></span>
+            {% if text %} <span id="status-text-{{ system.id }}">Connected</span> {% endif %}
         {% else %}
             <span class="status-dot dot-grey" id="status-{{ system.id }}"></span>
+            {% if text %} <span id="status-text-{{ system.id }}">Disconnected</span> {% endif %}
         {% endif %}
     {% endmacro %}
 
     {% macro status_summary(systems, id_prefix="") %}
         <span class="status-summary" id="{{ id_prefix }}">
             {% for s in systems %}
-                {% if s.critical %}
-                    <span class="status-dot dot-red"></span>
-                {% elif s.warning %}
-                    <span class="status-dot dot-orange"></span>
-                {% elif s.connected %}
-                    <span class="status-dot dot-green"></span>
-                {% else %}
-                    <span class="status-dot dot-grey"></span>
-                {% endif %}
+                {{ status_dot(s) }}
             {% endfor %}
         </span>
     {% endmacro %}
@@ -204,7 +200,7 @@
                                         <td>{{ system.type }}</td>
                                         <td>{{ usage_bar(system, 'cpu') }}</td>
                                         <td>{{ usage_bar(system, 'mem') }}</td>
-                                        <td>{{ status_dot(system) }}</td>
+                                        <td>{{ status_dot(system, true) }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -237,6 +233,7 @@
             const cpuFill = document.getElementById(`cpu-fill-${system.id}`);
             const memFill = document.getElementById(`mem-fill-${system.id}`);
             const status = document.getElementById(`status-${system.id}`);
+            const statusText = document.getElementById(`status-text-${system.id}`);
 
             if (cpuFill) {
                 const cpuPct = system.cpu.usage_pct;
@@ -253,6 +250,11 @@
 
             if (status) {
                 status.className = `status-dot ${getDotClass(system)}`;
+                if (statusText) {
+                    statusText.textContent = system.critical ? 'Critical' :
+                                             system.warning ? 'Warning' :
+                                             system.connected ? 'Connected' : 'Disconnected';
+                }
             }
         }
 

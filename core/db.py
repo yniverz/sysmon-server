@@ -140,6 +140,9 @@ class SystemDB:
         raise ValueError(f"Provider {provider_name} not found.")
     
     def add_system(self, site_name: str, system: System):
+        if self.get_system(system.id):
+            raise ValueError(f"System with ID {system.id} already exists.")
+
         for provider in self.providers:
             for site in provider.sites:
                 if site.name == site_name:
@@ -187,6 +190,17 @@ class SystemDB:
             else:
                 raise ValueError(f"Invalid attribute {key} for System.")
 
+        self.save_to_file()
+
+    def edit_system_id(self, old_id: str, new_id: str):
+        system = self.get_system(old_id)
+        if not system:
+            raise ValueError(f"System with ID {old_id} not found.")
+        if not new_id:
+            raise ValueError("New ID is required.")
+        if self.get_system(new_id):
+            raise ValueError(f"System with ID {new_id} already exists.")
+        system.id = new_id
         self.save_to_file()
 
     def edit_site(self, provider_name: str, site_name: str, **kwargs):

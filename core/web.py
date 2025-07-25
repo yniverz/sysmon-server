@@ -197,6 +197,12 @@ class Dashboard:
                             critical="critical" in form,
                         )
 
+                    elif action == "edit_system_id":
+                        self.db.edit_system_id(
+                            form["system_id"],
+                            new_id=form["new_id"]
+                        )
+
                     elif action == "remove_system":
                         self.db.remove_system(form["system_id"])
 

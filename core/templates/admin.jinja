@@ -164,7 +164,7 @@
             </div>
         </form>
 
-        <form method="post" style="margin-top: 10px;">
+        <form method="post" onsubmit="return confirm('Are you sure you want to delete this provider?');" style="margin-top: 10px;">
             <input type="hidden" name="action" value="remove_provider">
             <input type="hidden" name="name" value="{{ provider.name }}">
             <input type="submit" value="Remove Provider" class="btn-inline" style="background-color: #c62828;">
@@ -185,7 +185,7 @@
                 <input type="text" name="type" required>
             </div>
             <div class="form-group">
-                <label><a href="https://www.geonames.org/v3" target="_blank">Geoname:</a></label>
+                <label>Geoname:</label>
                 <input type="text" name="geoname">
             </div>
             <div class="form-actions">
@@ -225,7 +225,7 @@
                 </div>
             </form>
 
-            <form method="post">
+            <form method="post" onsubmit="return confirm('Delete this site?');">
                 <input type="hidden" name="action" value="remove_site">
                 <input type="hidden" name="provider_name" value="{{ provider.name }}">
                 <input type="hidden" name="site_name" value="{{ site.name }}">
@@ -279,7 +279,10 @@
 
                 <form method="post" id="system-{{ system.id }}" class="hidden">
                     <input type="hidden" name="action" value="edit_system">
-                    <input type="hidden" name="system_id" value="{{ system.id }}">
+                    {# <input type="hidden" name="system_id" value="{{ system.id }}"> #}
+                    <div class="form-group">
+                        <label>ID:</label><input type="text" name="id" value="{{ system.id }}" readonly>
+                    </div>
                     <div class="form-group">
                         <label>Name:</label><input type="text" name="name" value="{{ system.name }}">
                     </div>
@@ -299,10 +302,21 @@
                     </div>
                 </form>
 
-                <form method="post">
+                <form method="post" onsubmit="return confirm('Delete this system?');">
                     <input type="hidden" name="action" value="remove_system">
                     <input type="hidden" name="system_id" value="{{ system.id }}">
                     <input type="submit" value="Remove System" class="btn-inline" style="background-color: #c62828;">
+                </form>
+
+                <form method="post" onsubmit="return confirm('Are you sure you want to change the system ID?');">
+                    <input type="hidden" name="action" value="edit_system_id">
+                    <input type="hidden" name="system_id" value="{{ system.id }}">
+                    <div class="form-group">
+                        <label>New ID:</label><input type="text" name="new_id" required>
+                    </div>
+                    <div class="form-actions">
+                        <input type="submit" value="Change ID">
+                    </div>
                 </form>
             </div>
             {% endfor %}
@@ -311,15 +325,12 @@
     </section>
     {% endfor %}
 
-    <!-- Scroll memory -->
     <script>
         (function () {
             const KEY = 'admin-scroll-top';
-
             window.addEventListener('beforeunload', () => {
                 localStorage.setItem(KEY, window.scrollY);
             });
-
             window.addEventListener('load', () => {
                 const y = localStorage.getItem(KEY);
                 if (y !== null) {
@@ -332,7 +343,6 @@
             const form = document.getElementById(id);
             if (form) {
                 form.classList.toggle('hidden');
-                // form.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
     </script>
