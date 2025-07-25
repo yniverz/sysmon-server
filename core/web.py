@@ -203,6 +203,11 @@ class Dashboard:
                             new_id=form["new_id"]
                         )
 
+                        old_ws = next((ws for ws in self.clients if self.client_map[ws] == form["system_id"]), None)
+                        if old_ws:
+                            self.client_map[old_ws] = form["new_id"]
+                            print(f"Updated WebSocket mapping: {form['system_id']} -> {form['new_id']}")
+
                     elif action == "remove_system":
                         self.db.remove_system(form["system_id"])
 

@@ -279,10 +279,7 @@
 
                 <form method="post" id="system-{{ system.id }}" class="hidden">
                     <input type="hidden" name="action" value="edit_system">
-                    {# <input type="hidden" name="system_id" value="{{ system.id }}"> #}
-                    <div class="form-group">
-                        <label>ID:</label><input type="text" name="id" value="{{ system.id }}" readonly>
-                    </div>
+                    <input type="hidden" name="system_id" value="{{ system.id }}">
                     <div class="form-group">
                         <label>Name:</label><input type="text" name="name" value="{{ system.name }}">
                     </div>
@@ -312,7 +309,7 @@
                     <input type="hidden" name="action" value="edit_system_id">
                     <input type="hidden" name="system_id" value="{{ system.id }}">
                     <div class="form-group">
-                        <label>New ID:</label><input type="text" name="new_id" required>
+                        <label>New ID:</label><input type="text" name="new_id" value="{{ system.id }}" required>
                     </div>
                     <div class="form-actions">
                         <input type="submit" value="Change ID">
