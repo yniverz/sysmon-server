@@ -290,17 +290,18 @@
 
         <h3>Recent Events</h3>
         <div class="event-list" id="event-list">
-            {% if not system.events %}
+            {% if system.events|length == 0 %}
                 <p>No recent events.</p>
             {% else %}
-                {% for event in system.events | sort(attribute='timestamp', reverse=True)|slice(0, 50) %}
+                {% set sorted_events = system.events | sort(attribute='timestamp', reverse=True) %}
+                {% for event in sorted_events[:50] %}
                     <div class="event-item" data-ts="{{ event.timestamp }}">
                         <div class="event-header">
                             <span class="event-level-{{ event.level }}">
                                 [{{ event.level|upper }}] {{ event.type }} — {{ event.description }}
                             </span>
                             {% if event.clearable and not event.cleared %}
-                            <button onclick="clearEvent('{{ system.id }}', '{{ event.timestamp }}')">Clear</button>
+                            <button onclick="clearEvent('{{ system.id }}', '{{ event.id }}')">Clear</button>
                             {% endif %}
                         </div>
                         <div class="event-timestamp">{{ event.timestamp | datetimeformat }}</div>
@@ -372,7 +373,7 @@
                         <span class="event-level-${ev.level}">
                             [${ev.level.toUpperCase()}] ${ev.type} — ${ev.description}
                         </span>
-                        ${ev.clearable && !ev.cleared ? `<button onclick="clearEvent('${system.id}', '${ev.timestamp}')">Clear</button>` : ""}
+                        ${ev.clearable && !ev.cleared ? `<button onclick="clearEvent('${system.id}', '${ev.id}')">Clear</button>` : ""}
                     </div>
                     <div class="event-timestamp">${new Date(ev.timestamp * 1000).toLocaleString()}</div>
                 `;
@@ -452,10 +453,28 @@
             btn.onclick = revealInstall;
         }
 
-        function clearEvent(systemId, ts) {
-            fetch(`/event/clear?system_id=${encodeURIComponent(systemId)}&ts=${encodeURIComponent(ts)}`)
+        function clearEvent(systemId, id) {
+            {# fetch(`/event/clear?system_id=${encodeURIComponent(systemId)}&id=${encodeURIComponent(id)}`)
                 .then(() => fetchSystemUpdate())
-                .catch(err => alert("Failed to clear event: " + err));
+                .catch(err => alert("Failed to clear event: " + err)); #}
+            // post request instead of get
+            fetch(`/event/clear`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    system_id: systemId,
+                    id: id
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+            })
+            .then(() => fetchSystemUpdate())
+            .catch(err => alert("Failed to clear event: " + err));
         }
     </script>
 

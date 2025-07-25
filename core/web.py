@@ -10,7 +10,7 @@ from quart import Quart, websocket, session, render_template, request, redirect,
 
 import redis
 
-from models import Provider, Site, System, SystemCPU, SystemDisk, SystemMemory, SystemNetwork, SystemOS
+from models import Event, EventLevel, EventType, Provider, Site, System, SystemCPU, SystemDisk, SystemMemory, SystemNetwork, SystemOS, SystemService
 from db import SystemDB
 from util import Config
 
@@ -134,6 +134,24 @@ class Dashboard:
             #     "last_seen": system.last_seen,
             # })
             return jsonify(dataclasses.asdict(system))
+        
+        @app.route('/event/clear', methods=['POST'])
+        async def clear_event():
+            if not session.get('logged_in'):
+                abort(401)
+
+            data: dict = await request.get_json()
+            if not data:
+                abort(400, "Invalid JSON data")
+            system_id = data.get('system_id')
+            event_id = data.get('id')
+
+            if not system_id or not event_id:
+                abort(400, "Missing parameters")
+
+            self.db.clear_event(system_id, event_id)
+
+            return jsonify({"status": "success", "message": "Event cleared"})
 
         @app.route('/admin', methods=['GET', 'POST'])
         async def admin():
@@ -192,10 +210,18 @@ class Dashboard:
                             name=form.get("name"),
                             type=form.get("type"),
                             group=form.get("group", ""),
+                            services=form.get("services", "").splitlines() if form.get("services") else [],
                             connected="connected" in form,
                             warning="warning" in form,
                             critical="critical" in form,
                         )
+
+                        system_ws = next((ws for ws in self.clients if self.client_map[ws] == form["system_id"]), None)
+                        if system_ws:
+                            system_ws.send(json.dumps({
+                                "type": "set_watch_services",
+                                "services": [service.name for service in self.db.get_system(form["system_id"]).services]
+                            }))
 
                     elif action == "edit_system_id":
                         self.db.edit_system_id(
@@ -261,6 +287,8 @@ class Dashboard:
         self.client_map[ws] = system_id
         self.db.update_system(system_id, connected=True)
 
+        system.last_seen = int(time.time())
+
         if type == "hardware_info":
             data = json_data["hardware"]
             
@@ -311,10 +339,45 @@ class Dashboard:
 
             cpu_pct = data["cpu_pct"]
             mem_used_gib = data["mem_used_gib"]
+
+            if cpu_pct > 90:
+                self.db.add_event(system.id, Event.create_event(
+                    level=EventLevel.CRITICAL,
+                    type=EventType.CPU,
+                    timestamp=timestamp,
+                    clearable=True,
+                    description=f"CPU usage is at {cpu_pct}%."
+                ))
+            elif cpu_pct > 75:
+                self.db.add_event(system.id, Event.create_event(
+                    level=EventLevel.WARNING,
+                    type=EventType.CPU,
+                    timestamp=timestamp,
+                    clearable=True,
+                    description=f"CPU usage is at {cpu_pct}%."
+                ))
+
+            if mem_used_gib > 0.9 * system.memory.total_gib:
+                self.db.add_event(system.id, Event.create_event(
+                    level=EventLevel.CRITICAL,
+                    type=EventType.MEMORY,
+                    timestamp=timestamp,
+                    clearable=True,
+                    description=f"Memory usage is at {mem_used_gib} GiB."
+                ))
+            elif mem_used_gib > 0.75 * system.memory.total_gib:
+                self.db.add_event(system.id, Event.create_event(
+                    level=EventLevel.WARNING,
+                    type=EventType.MEMORY,
+                    timestamp=timestamp,
+                    clearable=True,
+                    description=f"Memory usage is at {mem_used_gib} GiB."
+                ))
+
             for disk in data["disks"]:
                 device = disk["device"]
                 used_gib = disk["used_gib"]
-                # Update the disk usage in the system
+                
                 for sys_disk in system.disks:
                     if sys_disk.device == device:
                         sys_disk.used_gib = used_gib
@@ -329,11 +392,32 @@ class Dashboard:
                 interfaces=data["network"]["interfaces"],
             )
 
+            services = [
+                SystemService(
+                    name=service["name"],
+                    running=service.get("running", False),
+                    status=service.get("status", ""),
+                )
+                for service in json_data["watched_services"]
+            ]
+
+            if any(not service.running for service in services):
+                self.db.add_event(system.id, Event.create_event(
+                    level=EventLevel.WARNING,
+                    type=EventType.SERVICE,
+                    timestamp=timestamp,
+                    clearable=True,
+                    description="One or more services are not running."
+                ))
+
             system.cpu.usage_pct = cpu_pct
             system.memory.used_gib = mem_used_gib
             system.network = network
+            system.services = services
 
-        system.last_seen = int(time.time())
+        elif type == "get_watch_services":
+            services = [service.name for service in system.services]
+            await ws.send(json.dumps({"type": "set_watch_services", "services": services}))
 
     def run(self):
         print(f"Starting on {self.config.dashboard_host}:{self.config.dashboard_port}")

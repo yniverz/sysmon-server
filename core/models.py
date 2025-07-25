@@ -38,6 +38,12 @@ class SystemDisk:
     total_gib: float
     used_gib: float = 0.0
 
+@dataclass
+class SystemService:
+    name: str
+    running: bool = False
+    status: str = ""
+
 class EventLevel:
     INFO = "info"
     WARNING = "warn"
@@ -47,15 +53,29 @@ class EventType:
     ONLINE = "online"
     OFFLINE = "offline"
     MISC = "misc"
+    SERVICE = "service"
+    MEMORY = "memory"
+    CPU = "cpu"
 
 @dataclass
 class Event:
     level: EventLevel
     type: EventType
     timestamp: float
+    id: str = dataclasses.field(default_factory=lambda: uuid.uuid4().hex)
     clearable: bool = False
     cleared: bool = False
+    occurrances: int = 1
     description: str = ""
+
+    def clear(self):
+        if not self.clearable:
+            raise ValueError("This event cannot be cleared.")
+        self.cleared = True
+
+    @staticmethod
+    def create_event(level: EventLevel, type: EventType, timestamp: float, clearable: bool = False, description: str = "") -> 'Event':
+        return Event(level=level, type=type, timestamp=timestamp, clearable=clearable, description=description)
 
 class SystemType:
     SERVER = "server"
@@ -69,19 +89,26 @@ class System:
     id: str
     name: str
     type: SystemType
-    auth_key: str = uuid.uuid4().hex
+    auth_key: str = dataclasses.field(default_factory=lambda: uuid.uuid4().hex)
 
     os: SystemOS = SystemOS("", "", "", "", "")
     cpu: SystemCPU = SystemCPU(0, 0, 0)
     memory: SystemMemory = SystemMemory(0)
     network: SystemNetwork = SystemNetwork("", "", "", {})
     disks: list[SystemDisk] = dataclasses.field(default_factory=list)
+    services: list[SystemService] = dataclasses.field(default_factory=list)
     events: list[Event] = dataclasses.field(default_factory=list)
     last_seen: int = 0
     connected: bool = False
     warning: bool = False
     critical: bool = False
     group: str = ""
+
+    def uncleared_event_exists(self, level: EventLevel, type: EventType) -> Event | None:
+        for event in self.events:
+            if event.level == level and event.type == type and not event.cleared:
+                return event
+        return None
 
 class SiteType:
     HOUSE = "house"

@@ -290,6 +290,10 @@
                         <label>Group:</label><input type="text" name="group" value="{{ system.group }}">
                     </div>
                     <div class="form-group">
+                        <label>Services:</label>
+                        <textarea name="services" placeholder="service1, service2, ...">{{ '\n'.join(system.services) }}</textarea>
+                    </div>
+                    <div class="form-group">
                         <label>Connected:</label><input type="checkbox" name="connected" {% if system.connected %}checked{% endif %}>
                         <label>Warning:</label><input type="checkbox" name="warning" {% if system.warning %}checked{% endif %}>
                         <label>Critical:</label><input type="checkbox" name="critical" {% if system.critical %}checked{% endif %}>

@@ -1,6 +1,6 @@
 import os
 import json
-from models import Provider, Site, System
+from models import Event, EventLevel, EventType, Provider, Site, System
 from util import DataclassJSONDecoder, DataclassJSONEncoder
 
 
@@ -228,3 +228,40 @@ class SystemDB:
                 self.save_to_file()
                 return provider
         raise ValueError(f"Provider {provider_name} not found.")
+    
+    def check_event_level(self, system_id: str):
+        system = self.get_system(system_id)
+        if not system:
+            raise ValueError(f"System with ID {system_id} not found.")
+
+        system.critical = any(e.level == EventLevel.CRITICAL and not e.cleared for e in system.events)
+        system.warning = any(e.level == EventLevel.WARNING and not e.cleared for e in system.events)
+
+        self.save_to_file()
+    
+    def add_event(self, system_id: str, event: Event):
+        system = self.get_system(system_id)
+        if not system:
+            raise ValueError(f"System with ID {system_id} not found.")
+        
+        existing = system.uncleared_event_exists(event.level, event.type)
+        if existing:
+            existing.occurrances += 1
+            existing.timestamp = event.timestamp
+            existing.description = event.description
+        else:
+            system.events.append(event)
+
+        self.check_event_level(system_id)
+
+    def clear_event(self, system_id: str, event_id: int):
+        system = self.get_system(system_id)
+        if not system:
+            raise ValueError(f"System with ID {system_id} not found.")
+
+        for event in system.events:
+            if event.id == event_id:
+                event.clear()
+                self.check_event_level(system_id)
+                return event
+        raise ValueError(f"Event with ID {event_id} not found in system {system_id}.")
