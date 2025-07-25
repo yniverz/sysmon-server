@@ -6,6 +6,14 @@ from util import Config
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 
+import signal
+import sys
+
+def handle_sigint(sig, frame):
+    print("Exiting on Ctrl+C")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_sigint)
 
 async def main():
     cfg = Config.from_toml()
