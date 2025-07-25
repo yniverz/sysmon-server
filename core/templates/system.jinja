@@ -398,7 +398,7 @@
         function revealInstall() {
             const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
             const ws_url = `${protocol}://${location.host}/ws`;
-            const cmd = `sudo apt-get update && wget https://github.com/yniverz/sysmon-agent && cd sysmon-agent && sudo ./install.sh "${sysID}" "${ws_url}" "${sysKey}"`;
+            const cmd = `sudo apt-get update && git clone https://github.com/yniverz/sysmon-agent && cd sysmon-agent && sudo ./install.sh "${sysID}" "${ws_url}" "${sysKey}"`;
             const el = document.getElementById("install-cmd");
             el.textContent = cmd;
             el.style.display = "block";
