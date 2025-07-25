@@ -87,20 +87,6 @@ class SystemDB:
         if not os.path.exists(self.data_path):
             self.create_structure()
             return
-        
-        if not os.path.exists("template_hash.txt"):
-            self.create_structure()
-            return
-    
-        with open("template_hash.txt", 'r') as f:
-            template_hash = f.read().strip()
-        with open(self.structure_path, 'r') as f:
-            structure = json.load(f)
-        current_hash = hash(json.dumps(structure, sort_keys=True))
-        if str(current_hash) != template_hash:
-            print("Template has changed, recreating structure.")
-            self.create_structure()
-            return
 
         with open(self.data_path, 'r') as f:
             self.providers = json.load(f, cls=DataclassJSONDecoder)

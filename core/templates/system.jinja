@@ -236,20 +236,20 @@
         <h3>CPU</h3>
         <div class="row">
             <div class="label">Usage:</div>
-            <div class="value"><span id="cpu-usage-text">{{ system.cpu.usage_pct }}%</span>
+            <div class="value"><span id="cpu-usage-text">{{ system.cpu.usage_pct or 0 }}%</span>
                 <div class="usage-bar">
-                    <div class="usage-fill usage-green" id="cpu-bar" style="width: {{ system.cpu.usage_pct }}%;"></div>
+                    <div class="usage-fill usage-green" id="cpu-bar" style="width: {{ system.cpu.usage_pct}}%;"></div>
                 </div>
             </div>
         </div>
 
         <h3>Memory</h3>
-        {% set total = system.memory.total_gib or 1 %}
-        {% set used = system.memory.used_gib %}
-        {% set mem_pct = (used / total * 100) | round(1) %}
+        {% set total = system.memory.total_gib or 0 %}
+        {% set used = system.memory.used_gib or 0 %}
+        {% set mem_pct = (used / (total or 1) * 100) %}
         <div class="row">
             <div class="label">Used:</div>
-            <div class="value"><span id="mem-text">{{ used }} GiB / {{ total }} GiB ({{ mem_pct }}%)</span>
+            <div class="value"><span id="mem-text">{{ used }} GiB / {{ total }} GiB ({{ mem_pct | round(1) }}%)</span>
                 <div class="usage-bar">
                     <div class="usage-fill usage-green" id="mem-bar" style="width: {{ mem_pct }}%;"></div>
                 </div>
@@ -258,23 +258,28 @@
 
         <h3>Network Interfaces</h3>
         <ul>
+            <li><strong>Hostname</strong>: {{ system.network.hostname }}</li>
+            <li><strong>Public IP</strong>: {{ system.network.public_ip or '—' }}</li>
+            <br>
             {% for name, ips in system.network.interfaces.items() %}
-            <li><strong>{{ name }}</strong>: {{ ips | join(', ') }}</li>
+                {% if ips %}
+                    <li><strong>{{ name }}</strong>: {{ ips | join(', ') }}</li>
+                {% endif %}
             {% endfor %}
         </ul>
 
         <h3>Disks</h3>
         <ul>
             {% for disk in system.disks %}
-            {% set total = disk.total_gib or 1 %}
-            {% set used = disk.used_gib %}
-            {% set pct = (used / total * 100) | round(1) %}
-            <li>
-                <div>{{ disk.device }} ({{ disk.mountpoint }}) — {{ used }} GiB / {{ total }} GiB ({{ pct }}%)</div>
-                <div class="usage-bar">
-                    <div class="usage-fill usage-green" style="width: {{ pct }}%;"></div>
-                </div>
-            </li>
+                {% set total = disk.total_gib or 1 %}
+                {% set used = disk.used_gib %}
+                {% set pct = (used / total * 100) | round(1) %}
+                <li>
+                    <div>{{ disk.device }} ({{ disk.mountpoint }}) — {{ used }} GiB / {{ total }} GiB ({{ pct }}%)</div>
+                    <div class="usage-bar">
+                        <div class="usage-fill usage-green" style="width: {{ pct }}%;"></div>
+                    </div>
+                </li>
             {% endfor %}
         </ul>
 
@@ -285,20 +290,22 @@
 
         <h3>Recent Events</h3>
         <div class="event-list" id="event-list">
-            {% if system.events %}
-            {% for event in system.events | sort(attribute='timestamp', reverse=True)|slice(0, 50) %}
-            <div class="event-item" data-ts="{{ event.timestamp }}">
-                <div class="event-header">
-                    <span class="event-level-{{ event.level }}">
-                        [{{ event.level|upper }}] {{ event.type }} — {{ event.description }}
-                    </span>
-                    {% if event.clearable and not event.cleared %}
-                    <button onclick="clearEvent('{{ system.id }}', '{{ event.timestamp }}')">Clear</button>
-                    {% endif %}
-                </div>
-                <div class="event-timestamp">{{ event.timestamp | datetimeformat }}</div>
-            </div>
-            {% endfor %}
+            {% if not system.events %}
+                <p>No recent events.</p>
+            {% else %}
+                {% for event in system.events | sort(attribute='timestamp', reverse=True)|slice(0, 50) %}
+                    <div class="event-item" data-ts="{{ event.timestamp }}">
+                        <div class="event-header">
+                            <span class="event-level-{{ event.level }}">
+                                [{{ event.level|upper }}] {{ event.type }} — {{ event.description }}
+                            </span>
+                            {% if event.clearable and not event.cleared %}
+                            <button onclick="clearEvent('{{ system.id }}', '{{ event.timestamp }}')">Clear</button>
+                            {% endif %}
+                        </div>
+                        <div class="event-timestamp">{{ event.timestamp | datetimeformat }}</div>
+                    </div>
+                {% endfor %}
             {% endif %}
         </div>
     </div>
@@ -339,9 +346,9 @@
             cpuBar.className = "usage-fill " + getUsageColor(cpuPct);
             document.getElementById("cpu-usage-text").textContent = cpuPct + "%";
 
-            const total = system.memory.total_gib || 1;
+            const total = system.memory.total_gib;
             const used = system.memory.used_gib;
-            const pct = (used / total * 100).toFixed(1);
+            const pct = (used / (total || 1) * 100).toFixed(1);
             const memBar = document.getElementById("mem-bar");
             memBar.style.width = pct + "%";
             memBar.className = "usage-fill " + getUsageColor(pct);
@@ -385,7 +392,7 @@
         }
 
         setInterval(fetchSystemUpdate, 5000);
-        window.onload = fetchSystemUpdate;
+        {# window.onload = fetchSystemUpdate; #}
 
         function revealInstall() {
             const systemName = document.getElementById("sys-name").textContent;

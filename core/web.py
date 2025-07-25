@@ -284,6 +284,8 @@ class Dashboard:
                 for disk in data["disks"]
             ]
 
+            disks.sort(key=lambda d: d.total_gib, reverse=True)
+
             self.db.update_system(
                 system_id,
                 network=network,
@@ -306,6 +308,8 @@ class Dashboard:
                     if sys_disk.device == device:
                         sys_disk.used_gib = used_gib
                         break
+
+            system.disks.sort(key=lambda d: d.total_gib, reverse=True)
 
             network = SystemNetwork(
                 hostname=data["network"]["hostname"],
